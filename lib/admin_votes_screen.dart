@@ -162,7 +162,7 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
   Future<void> _popolaDatabaseGiocatori() async {
     final String apiKey = 'bce05b8a0e7f20ab55f3cf2a69f7102b'; 
     final int leagueId = 1; 
-    final int season = 2022;
+    final int season = 2026;
 
     setState(() => isFetchingApi = true); 
 
