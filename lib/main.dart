@@ -10,6 +10,8 @@ import 'calendar_screen.dart';
 import 'admin_votes_screen.dart';
 import 'admin_settings_screen.dart';
 import 'admin_groups_screen.dart'; 
+import 'admin_trades_screen.dart';
+import 'trade_center_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -63,17 +65,203 @@ class FantaMondialeApp extends StatelessWidget {
   }
 }
 
-class DashboardScreen extends StatelessWidget {
+class DashboardScreen extends StatefulWidget {
   final String teamId;
   final String teamName;
   final bool isAdmin;
 
   const DashboardScreen({super.key, required this.teamId, required this.teamName, required this.isAdmin});
 
+  @override
+  State<DashboardScreen> createState() => _DashboardScreenState();
+}
+
+class _DashboardScreenState extends State<DashboardScreen> {
+  late final RealtimeChannel _tradeChannel;
+
+  @override
+  void initState() {
+    super.initState();
+    _setupRealtimeNotifications();
+  }
+
+  // --- IL MOTORE DELLE NOTIFICHE IN TEMPO REALE ---
+  void _setupRealtimeNotifications() {
+    _tradeChannel = Supabase.instance.client.channel('public:pending_trades');
+    
+    _tradeChannel.onPostgresChanges(
+      event: PostgresChangeEvent.insert,
+      schema: 'public',
+      table: 'pending_trades',
+      callback: (payload) {
+        final newRecord = payload.newRecord;
+        // Se qualcuno HA INVIATO una proposta a TE
+        if (newRecord['receiver_team_id'] == widget.teamId && mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🔔 MERCATO: Hai ricevuto una nuova proposta di scambio!'),
+              backgroundColor: Colors.blue,
+              duration: Duration(seconds: 5),
+              behavior: SnackBarBehavior.floating,
+            )
+          );
+        }
+      }
+    ).onPostgresChanges(
+      event: PostgresChangeEvent.update,
+      schema: 'public',
+      table: 'pending_trades',
+      callback: (payload) async {
+        final newRecord = payload.newRecord;
+        final oldRecord = payload.oldRecord;
+        
+        // Se una trattativa è APPENA stata accettata (passaggio da pending a accepted)
+        if (newRecord['status'] == 'accepted' && oldRecord['status'] != 'accepted') {
+          // Chiama la nuova funzione che scarica i nomi e costruisce il pop-up dettagliato
+          await _showDetailedTradeNotification(newRecord);
+        }
+      }
+    ).subscribe();
+  }
+
+  // --- COSTRUISCE LA BREAKING NEWS DI MERCATO (VERSIONE VIP) ---
+  Future<void> _showDetailedTradeNotification(Map<String, dynamic> record) async {
+    try {
+      final client = Supabase.instance.client;
+
+      // 1. Recupera i nomi delle due squadre
+      final senderTeamData = await client.from('fantasy_teams').select('team_name').eq('id', record['sender_team_id']).maybeSingle();
+      final receiverTeamData = await client.from('fantasy_teams').select('team_name').eq('id', record['receiver_team_id']).maybeSingle();
+      
+      String senderTeam = senderTeamData?['team_name'] ?? 'Squadra Ignota';
+      String receiverTeam = receiverTeamData?['team_name'] ?? 'Squadra Ignota';
+
+      // 2. Recupera i nomi
+      List<dynamic> senderPlayerIds = record['sender_player_ids'];
+      final senderPlayersData = await client.from('players').select('name').inFilter('id', senderPlayerIds);
+      String senderPlayers = senderPlayersData.map((p) => p['name']).join(', ');
+
+      List<dynamic> receiverPlayerIds = record['receiver_player_ids'];
+      final receiverPlayersData = await client.from('players').select('name').inFilter('id', receiverPlayerIds);
+      String receiverPlayers = receiverPlayersData.map((p) => p['name']).join(', ');
+
+      // 3. Mostra il pop-up VIP a schermo
+      if (mounted) {
+        showDialog(
+          context: context,
+          barrierDismissible: false, 
+          builder: (BuildContext ctx) {
+            return Dialog(
+              backgroundColor: Colors.transparent,
+              insetPadding: const EdgeInsets.all(20),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  // Sfondo scuro elegante tipo notte di Champions
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF141E30), Color(0xFF243B55)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  // Bordo dorato
+                  border: Border.all(color: Colors.amberAccent, width: 2), 
+                  // Ombra "Glow" dorata in stile VIP
+                  boxShadow: [
+                    BoxShadow(color: Colors.amberAccent.withValues(alpha: 0.3), blurRadius: 30, spreadRadius: 5, offset: const Offset(0, 0)),
+                  ],
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, 
+                  children: [
+                    // --- INTESTAZIONE VIP ---
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Icon(Icons.workspace_premium, color: Colors.amberAccent, size: 28),
+                        const Expanded(
+                          child: Text(
+                            ' ACCORDO VIP ', 
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: Colors.amberAccent, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white54, size: 28),
+                          onPressed: () => Navigator.of(ctx).pop(),
+                        ),
+                      ],
+                    ),
+                    const Divider(color: Colors.amberAccent, thickness: 1, height: 30),
+                    const SizedBox(height: 10),
+                    
+                    // --- ICONA CENTRALE LUMINOSA ---
+                    Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        Icon(Icons.handshake, color: Colors.white.withValues(alpha: 0.1), size: 90), // Ombra dietro
+                        const Icon(Icons.handshake, color: Colors.white, size: 75), // Icona principale
+                        const Positioned(
+                          top: 0, right: 0,
+                          child: Icon(Icons.star, color: Colors.amberAccent, size: 24), // Stellina chic
+                        )
+                      ],
+                    ),
+                    const SizedBox(height: 30),
+                    
+                    // --- TESTO FORMATTATO (RICH TEXT) ---
+                    RichText(
+                      textAlign: TextAlign.center,
+                      text: TextSpan(
+                        style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.white70), // Stile base
+                        children: [
+                          TextSpan(text: senderTeam, style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 20)),
+                          const TextSpan(text: '\nha ceduto\n'),
+                          TextSpan(text: senderPlayers, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                          const TextSpan(text: '\n\na\n'),
+                          TextSpan(text: receiverTeam, style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 20)),
+                          const TextSpan(text: '\n\nin cambio di\n'),
+                          TextSpan(text: receiverPlayers, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+                        ],
+                      ),
+                    ),
+                    
+                    const SizedBox(height: 30),
+                    
+                    // --- BOTTONE DI CHIUSURA ELEGANTE ---
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(ctx).pop(),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.amberAccent,
+                        foregroundColor: Colors.black87,
+                        elevation: 5,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                        padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 12),
+                      ),
+                      child: const Text('CHIUDI', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
+                    )
+                  ],
+                ),
+              ),
+            );
+          }
+        );
+      }
+    } catch (e) {
+      debugPrint('Errore notifica dettagliata: $e');
+    }
+  }
+  
+  @override
+  void dispose() {
+    Supabase.instance.client.removeChannel(_tradeChannel); // Spegne la radio quando esci
+    super.dispose();
+  }
+
   Future<void> _logout(BuildContext context) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.clear(); 
-    if (!context.mounted) return;
+    if (!mounted) return;
     Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const LoginScreen()));
   }
 
@@ -117,6 +305,8 @@ class DashboardScreen extends StatelessWidget {
                 const SizedBox(height: 10),
                 _adminMenuButton(ctx, Icons.schema, 'Assegnazione Gironi', const AdminGroupsScreen()),
                 const SizedBox(height: 10),
+                _adminMenuButton(ctx, Icons.swap_horiz, 'Scambi tra Squadre', const AdminTradesScreen()), 
+                const SizedBox(height: 10),
                 _adminMenuButton(ctx, Icons.edit_document, 'Modifica Regolamento', const RulesScreen(isAdmin: true)),
                 const SizedBox(height: 10),
                 _adminMenuButton(ctx, Icons.tune, 'Modificatori Calcolo', const AdminSettingsScreen()),
@@ -128,15 +318,14 @@ class DashboardScreen extends StatelessWidget {
     );
   }
 
-  // --- WIDGET PERSONALIZZATO PER I PULSANTI A GRIGLIA ---
   Widget _buildGridButton(BuildContext context, String title, IconData icon, Widget destination) {
     return InkWell(
       onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => destination)),
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.7), // Effetto vetro leggero
-          borderRadius: BorderRadius.circular(20),
+          color: Colors.white.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5))
           ],
@@ -145,18 +334,18 @@ class DashboardScreen extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: Colors.green[50],
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, size: 36, color: Colors.green[800]),
+              child: Icon(icon, size: 26, color: Colors.green[800]),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 6),
             Text(
               title,
               textAlign: TextAlign.center,
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.grey[800]),
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[800], height: 1.1),
             ),
           ],
         ),
@@ -167,10 +356,10 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true, // L'immagine va anche sotto l'app bar!
+      extendBodyBehindAppBar: true, 
       appBar: AppBar(
         title: const Text('FantaMondiale VIP', style: TextStyle(color: Color.fromRGBO(255, 255, 255, 1), fontWeight: FontWeight.bold, letterSpacing: 1.2)),
-        backgroundColor: Colors.transparent, // AppBar Trasparente
+        backgroundColor: Colors.transparent, 
         iconTheme: const IconThemeData(color: Color.fromARGB(255, 0, 0, 0)),
         actions: [
           IconButton(
@@ -181,12 +370,13 @@ class DashboardScreen extends StatelessWidget {
         ],
       ),
       body: Container(
-        // SFONDO STADIO
+        width: double.infinity,
+        height: double.infinity,
         decoration: BoxDecoration(
           image: DecorationImage(
-            image: const AssetImage('assets/sfondo.png'), // Immagine stadio
+            image: const AssetImage('assets/sfondo.png'), 
             fit: BoxFit.cover,
-            colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.darken), // Scurisce l'immagine per far leggere il testo
+            colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.darken), 
           ),
         ),
         child: SafeArea(
@@ -196,12 +386,11 @@ class DashboardScreen extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 
-                // --- CARD LA TUA SQUADRA (Con Gradiente Oro/Verde) ---
                 Container(
                   padding: const EdgeInsets.all(24.0),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [const Color.fromARGB(255, 226, 193, 1), const Color.fromARGB(255, 225, 102, 1)],
+                    gradient: const LinearGradient(
+                      colors: [Color.fromARGB(255, 226, 193, 1), Color.fromARGB(255, 225, 102, 1)],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -212,7 +401,7 @@ class DashboardScreen extends StatelessWidget {
                     children: [
                       const Text('LA TUA SQUADRA', style: TextStyle(fontSize: 14, color: Colors.white70, letterSpacing: 2)),
                       const SizedBox(height: 8),
-                      Text(teamName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
+                      Text(widget.teamName, style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white), textAlign: TextAlign.center),
                       const SizedBox(height: 16),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -238,45 +427,24 @@ class DashboardScreen extends StatelessWidget {
 
                 // --- GRIGLIA PULSANTI MODERNA ---
                 GridView.count(
-                  shrinkWrap: true, // Importante dentro un SingleChildScrollView
-                  physics: const NeverScrollableScrollPhysics(), // Disabilita lo scroll interno alla griglia
-                  crossAxisCount: 2, // 2 colonne
-                  mainAxisSpacing: 16,
-                  crossAxisSpacing: 16,
-                  childAspectRatio: 1.1, // Rende i riquadri leggermente rettangolari
+                  shrinkWrap: true, 
+                  physics: const NeverScrollableScrollPhysics(), 
+                  crossAxisCount: 2, 
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.6, 
                   children: [
-                    _buildGridButton(context, 'Schiera\nFormazione', Icons.sports_soccer, TeamLineupScreen(teamId: teamId, teamName: teamName)),
-                    _buildGridButton(context, 'Mercato e\nRosa', Icons.shopping_cart_outlined, RosterScreen(teamId: teamId)),
+                    _buildGridButton(context, 'Schiera\nFormazione', Icons.sports_soccer, TeamLineupScreen(teamId: widget.teamId, teamName: widget.teamName)),
+                    _buildGridButton(context, 'Mercato e\nRosa', Icons.shopping_cart_outlined, RosterScreen(teamId: widget.teamId)),
                     _buildGridButton(context, 'Calendario\nRisultati', Icons.calendar_month, const CalendarScreen()),
-                    _buildGridButton(context, 'Classifica\nLega', Icons.emoji_events_outlined, StandingsScreen(teamId: teamId)),
+                    _buildGridButton(context, 'Classifica\nLega', Icons.emoji_events_outlined, StandingsScreen(teamId: widget.teamId)),
+                    _buildGridButton(context, 'Centro\nScambi', Icons.sync_alt, TradeCenterScreen(myTeamId: widget.teamId)),
+                    _buildGridButton(context, 'Regolamento\nLega', Icons.menu_book, const RulesScreen(isAdmin: false)),
                   ],
                 ),
                 
-                const SizedBox(height: 16),
-                
-                // Bottone Regolamento (A larghezza piena sotto la griglia)
-                InkWell(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RulesScreen(isAdmin: false))),
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 20),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.menu_book, color: Colors.blue[800]),
-                        const SizedBox(width: 12),
-                        const Text('Regolamento Lega', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                      ],
-                    ),
-                  ),
-                ),
-                
                 // --- SEZIONE ADMIN ---
-                if (isAdmin) ...[
+                if (widget.isAdmin) ...[
                   const SizedBox(height: 40),
                   Container(
                     decoration: BoxDecoration(

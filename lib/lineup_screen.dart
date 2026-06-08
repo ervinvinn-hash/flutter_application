@@ -239,7 +239,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     }
   }
 
-  // NUOVA FUNZIONE: Restituisce solo l'emoji della bandiera
   String _getFlagOnly(String country) {
     final String cleanCountry = country.trim(); 
     final Map<String, String> flags = {
@@ -287,7 +286,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                       return ListTile(
                         leading: CircleAvatar(backgroundColor: _getRoleColor(p['role']), child: Text(p['role'], style: const TextStyle(color: Colors.white, fontSize: 12))),
                         title: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('${p['national_team']} ${_getFlagOnly(p['national_team'])}'), // Aggiunta bandierina anche qui
+                        subtitle: Text('${p['national_team']} ${_getFlagOnly(p['national_team'])}'),
                         trailing: Icon(Icons.add_circle, color: Colors.orange[800]),
                         onTap: () {
                           Navigator.pop(ctx);
@@ -354,7 +353,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                 CircleAvatar(
                   radius: 22,
                   backgroundColor: _getRoleColor(player['role']),
-                  // Modificato: Ora mostra la bandiera al posto delle 3 lettere!
                   child: Text(_getFlagOnly(player['national_team']), style: const TextStyle(fontSize: 18)),
                 ),
                 if (player['is_captain'])
@@ -371,7 +369,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 2)]),
+              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(4), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 2)]),
               child: Text(player['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87), overflow: TextOverflow.ellipsis, maxLines: 1),
             ),
           ],
@@ -388,94 +386,98 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   Widget _buildTabCampo() {
-    return Column(
-      children: [
-        Expanded(
-          child: Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: Colors.green[800], 
-              image: const DecorationImage(
-                image: NetworkImage('https://www.transparenttextures.com/patterns/grass.png'),
-                fit: BoxFit.cover,
-                opacity: 0.3,
-              ),
-            ),
-            child: Stack(
+    return Container(
+      decoration: BoxDecoration(
+        image: const DecorationImage(
+          image: AssetImage('assets/foto_campo.png'),
+          fit: BoxFit.cover,
+          alignment: Alignment.topCenter,
+          colorFilter: ColorFilter.mode(Colors.black26, BlendMode.darken),
+        ),
+      ),
+      child: Column(
+        children: [
+          // IL CAMPO E I TITOLARI
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Center(child: Container(height: 2, color: Colors.white.withValues(alpha: 0.5))),
-                Center(child: Container(width: 80, height: 80, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: Colors.white.withValues(alpha: 0.5), width: 2)))),
-                
-                Positioned(top: 0, left: 0, right: 0, child: Center(child: Container(width: 160, height: 60, decoration: BoxDecoration(border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), right: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), bottom: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2)))))),
-                Positioned(top: 0, left: 0, right: 0, child: Center(child: Container(width: 70, height: 25, decoration: BoxDecoration(border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), right: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), bottom: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2)))))),
-                
-                Positioned(bottom: 0, left: 0, right: 0, child: Center(child: Container(width: 160, height: 60, decoration: BoxDecoration(border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), right: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), top: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2)))))),
-                Positioned(bottom: 0, left: 0, right: 0, child: Center(child: Container(width: 70, height: 25, decoration: BoxDecoration(border: Border(left: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), right: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2), top: BorderSide(color: Colors.white.withValues(alpha: 0.5), width: 2)))))),
-                
-                Column(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                Padding(
+                  padding: const EdgeInsets.only(top: 70.0, left: 50.0, right: 50.0, bottom: 0.0),
+                  child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 0.0, left: 60.0, right: 60.0, bottom: 0.0),
+                  child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12.0, left: 60.0, right: 60.0, bottom: 0.0),
+                  child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
+                ),
+                Row(
                   children: [
-                    _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
-                    _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
-                    _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
-                    
-                    Row(
-                      children: [
-                        Expanded(child: Container()),
-                        _buildSlot('P', fieldP, (p) => fieldP = p),
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.centerRight,
-                            child: Padding(
-                              padding: const EdgeInsets.only(right: 16.0),
-                              child: _buildSlot('CT', fieldCoach, (p) => fieldCoach = p),
-                            ),
-                          ),
+                    Expanded(child: Container()),
+                    _buildSlot('P', fieldP, (p) => fieldP = p),
+                    Expanded(
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 70.0),
+                          child: _buildSlot('CT', fieldCoach, (p) => fieldCoach = p),
                         ),
-                      ],
+                      ),
                     ),
                   ],
                 ),
               ],
             ),
           ),
-        ),
-        
-        Container(
-          color: Colors.white.withValues(alpha: 0.9),
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: List.generate(5, (index) {
-                  return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
-                }),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
-                  const SizedBox(width: 40),
-                  _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
-                ],
-              ),
-            ],
-          ),
-        )
-      ],
+          
+          // LA PANCHINA (BOX FLUTTUANTE CON BACKGROUND CHE SCORRE DIETRO)
+          Container(
+            margin: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.9),
+              borderRadius: BorderRadius.circular(24),
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))],
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
+                  child: Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(5, (index) {
+                    return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
+                  }),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
+                    const SizedBox(width: 40),
+                    _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                  ],
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
     );
   }
 
   Widget _buildListCard(Map<String, dynamic> p) {
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       elevation: 2,
       color: Colors.white.withValues(alpha: 0.95),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Padding(
         padding: const EdgeInsets.all(12.0),
         child: Column(
@@ -494,10 +496,12 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                     children: [
                       Row(
                         children: [
-                          Text(p['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87)),
-                          if (p['is_captain']) const Padding(padding: EdgeInsets.only(left: 4), child: Icon(Icons.stars, color: Colors.amber, size: 16)),
+                          Expanded(
+                            child: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87), overflow: TextOverflow.ellipsis),
+                          ),
+                          if (p['is_captain']) const Padding(padding: EdgeInsets.only(right: 4), child: Icon(Icons.stars, color: Colors.amber, size: 20)),
                           const SizedBox(width: 6),
-                          Text(_getFlagOnly(p['national_team']), style: const TextStyle(fontSize: 14)), // Bandierina anche qui di fianco al nome!
+                          Padding(padding: const EdgeInsets.only(right: 10), child: Text(_getFlagOnly(p['national_team']), style: const TextStyle(fontSize: 18))), 
                         ],
                       ),
                       Text(p['match'], style: const TextStyle(color: Colors.grey, fontSize: 12)),
@@ -559,126 +563,167 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     List<Map<String, dynamic>> panchinari = roster.where((p) => p['is_bench'] && p['role'] != 'CT').toList();
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         image: DecorationImage(
-          image: AssetImage('assets/sfondo.png'),
+          image: const AssetImage('assets/sfondo.png'), // SFONDO GENERALE APP
           fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.darken),
         ),
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
-          title: const Text('Invio Formazione', style: TextStyle(color: Color.fromRGBO(255, 255, 255, 1), fontWeight: FontWeight.bold)),
+          title: const Text('Schiera Formazione', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          iconTheme: const IconThemeData(color: Color.fromRGBO(255, 255, 255, 1)),
+          iconTheme: const IconThemeData(color: Colors.white),
           actions: [
             IconButton(icon: const Icon(Icons.help_outline), onPressed: () {
               ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tap: Inserisci/Cambia. Doppio Tap: Rimuovi. Pressione Lunga: Capitano.')));
             }),
           ],
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(100),
-            child: Column(
-              children: [
-                Container(
-                  color: Colors.white.withValues(alpha: 0.8),
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        flex: 4,
-                        child: Row(
-                          children: [
-                            Icon(Icons.group, color: Colors.orange[800], size: 24),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                widget.teamName,
-                                style: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Center(
-                          child: DropdownButton<String>(
-                            value: currentFormation,
-                            dropdownColor: Colors.white.withValues(alpha: 0.9),
-                            icon: Icon(Icons.arrow_drop_down, color: Colors.orange[800]),
-                            style: TextStyle(color: Colors.orange[800], fontSize: 18, fontWeight: FontWeight.bold),
-                            underline: Container(),
-                            onChanged: (String? newValue) {
-                              if (newValue != null) _changeFormation(newValue);
-                            },
-                            items: validFormations.map<DropdownMenuItem<String>>((String value) {
-                              return DropdownMenuItem<String>(value: value, child: Text(value));
-                            }).toList(),
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        flex: 3,
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.end,
-                          children: [
-                            IconButton(
-                              icon: Icon(Icons.save, color: Colors.orange[800]),
-                              tooltip: 'Salva bozza',
-                              onPressed: () => _saveLineup(forceSave: true),
-                            ),
-                            IconButton(
-                              icon: Icon(Icons.share, color: Colors.orange[800]),
-                              tooltip: 'Copia formazione',
-                              onPressed: _copyLineupToClipboard,
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Container(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  child: TabBar(
-                    controller: _tabController,
-                    indicatorColor: Colors.orange[800],
-                    indicatorWeight: 4,
-                    labelColor: Colors.black,
-                    unselectedLabelColor: Colors.black54,
-                    tabs: const [
-                      Tab(text: 'CAMPO'),
-                      Tab(text: 'TITOLARI'),
-                      Tab(text: 'PANCHINA'),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         ),
         body: isLoading
             ? const Center(child: CircularProgressIndicator(color: Colors.orange))
-            : TabBarView(
-                controller: _tabController,
+            : Column(
                 children: [
-                  _buildTabCampo(),
-                  ListView.builder(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8),
-                    itemCount: titolari.length,
-                    itemBuilder: (context, index) => _buildListCard(titolari[index]),
+                  // FLOATING BOX SUPERIORE
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10)],
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // RIGA SUPERIORE (SQUADRA - MODULO - BOTTONI)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 16, right: 8, top: 12, bottom: 8),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              // NOME SQUADRA
+                              Expanded(
+                                flex: 3,
+                                child: Row(
+                                  children: [
+                                    Icon(Icons.shield, color: Colors.orange[800], size: 24),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        widget.teamName,
+                                        style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.bold),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // BOX MODULO (Stile Box Crediti)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 4),
+                                decoration: BoxDecoration(
+                                  gradient: LinearGradient(colors: [Colors.orange[700]!, Colors.orange[900]!]),
+                                  borderRadius: BorderRadius.circular(20),
+                                  boxShadow: [BoxShadow(color: Colors.orange.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 3))],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Text('MODULO', style: TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                    DropdownButtonHideUnderline(
+                                      child: DropdownButton<String>(
+                                        value: currentFormation,
+                                        dropdownColor: Colors.orange[900],
+                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                                        isDense: true,
+                                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                        onChanged: (String? newValue) {
+                                          if (newValue != null) _changeFormation(newValue);
+                                        },
+                                        items: validFormations.map<DropdownMenuItem<String>>((String value) {
+                                          return DropdownMenuItem<String>(value: value, child: Text(value));
+                                        }).toList(),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              // BOTTONI SALVA E COPIA
+                              Expanded(
+                                flex: 2,
+                                child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(Icons.save, color: Colors.orange[800], size: 24),
+                                      tooltip: 'Salva bozza',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: () => _saveLineup(forceSave: true),
+                                    ),
+                                    const SizedBox(width: 20),
+                                    IconButton(
+                                      icon: Icon(Icons.share, color: Colors.orange[800], size: 24),
+                                      tooltip: 'Copia formazione',
+                                      padding: EdgeInsets.zero,
+                                      constraints: const BoxConstraints(),
+                                      onPressed: _copyLineupToClipboard,
+                                    ),
+                                    const SizedBox(width: 20),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        // TAB BAR (Inserita nel box fluttuante)
+                        TabBar(
+                          controller: _tabController,
+                          indicatorColor: Colors.orange[800],
+                          indicatorWeight: 4,
+                          labelColor: Colors.black87,
+                          unselectedLabelColor: const Color.fromARGB(93, 0, 0, 0),
+                          labelStyle: const TextStyle(fontWeight: FontWeight.bold),
+                          tabs: const [
+                            Tab(text: 'CAMPO'),
+                            Tab(text: 'TITOLARI'),
+                            Tab(text: 'PANCHINA'),
+                          ],
+                        ),
+                      ],
+                    ),
                   ),
-                  ListView.builder(
-                    padding: const EdgeInsets.only(top: 8, bottom: 8),
-                    itemCount: panchinari.length,
-                    itemBuilder: (context, index) => _buildListCard(panchinari[index]),
+
+                  // CONTENUTO TABS
+                  Expanded(
+                    child: TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildTabCampo(),
+                        titolari.isEmpty 
+                            ? const Center(child: Text('Nessun titolare schierato', style: TextStyle(color: Colors.white70, fontSize: 16)))
+                            : ListView.builder(
+                                padding: const EdgeInsets.only(top: 8, bottom: 20),
+                                itemCount: titolari.length,
+                                itemBuilder: (context, index) => _buildListCard(titolari[index]),
+                              ),
+                        panchinari.isEmpty 
+                            ? const Center(child: Text('Nessun panchinaro schierato', style: TextStyle(color: Colors.white70, fontSize: 16)))
+                            : ListView.builder(
+                                padding: const EdgeInsets.only(top: 8, bottom: 20),
+                                itemCount: panchinari.length,
+                                itemBuilder: (context, index) => _buildListCard(panchinari[index]),
+                              ),
+                      ],
+                    ),
                   ),
                 ],
               ),
+
+        // BOTTONE INVIA FORMAZIONE
         bottomNavigationBar: SafeArea(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
