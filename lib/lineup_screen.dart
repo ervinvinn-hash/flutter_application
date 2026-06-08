@@ -403,15 +403,15 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 70.0, left: 50.0, right: 50.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 40.0, left: 40.0, right: 40.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 60.0, right: 60.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 0.0, left: 40.0, right: 40.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 12.0, left: 60.0, right: 60.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 12.0, left: 40.0, right: 40.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
                 ),
                 Row(
@@ -422,7 +422,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                       child: Align(
                         alignment: Alignment.centerRight,
                         child: Padding(
-                          padding: const EdgeInsets.only(right: 70.0),
+                          padding: const EdgeInsets.only(right: 40.0),
                           child: _buildSlot('CT', fieldCoach, (p) => fieldCoach = p),
                         ),
                       ),
