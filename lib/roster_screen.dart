@@ -107,12 +107,15 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
   int countRole(String role) => mySquad.where((player) => player.role == role).length;
 
   String getCountryWithFlag(String country) {
-    final String cleanCountry = country.trim(); 
+    final String cleanCountry = country
+        .trim()
+        .replaceAll('’', '\'')
+        .replaceAll('`', '\''); 
     final Map<String, String> flags = {
       'Algeria': '🇩🇿', 'Arabia Saudita': '🇸🇦', 'Argentina': '🇦🇷', 'Australia': '🇦🇺',
       'Austria': '🇦🇹', 'Belgio': '🇧🇪', 'Bosnia e Herzegovina': '🇧🇦', 'Brasile': '🇧🇷',
       'Canada': '🇨🇦', 'Capo Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Congo': '🇨🇩', 
-      'Congo DR': '🇨🇩', 'Corea': '🇰🇷', 'Costa d\'avorio': '🇨🇮', 'Croazia': '🇭🇷',
+      'Congo DR': '🇨🇩', 'Corea': '🇰🇷', 'Costa D\'avorio': '🇨🇮', 'Croazia': '🇭🇷',
       'Curacao': '🇨🇼', 'Curaçao': '🇨🇼', 'Ecuador': '🇪🇨', 'Egitto': '🇪🇬',
       'Francia': '🇫🇷', 'Germania': '🇩🇪', 'Ghana': '🇬🇭', 'Giappone': '🇯🇵',
       'Giordania': '🇯🇴', 'Haiti': '🇭🇹', 'Inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Iran': '🇮🇷',
@@ -121,7 +124,7 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
       'Paesi Bassi': '🇳🇱', 'Panama': '🇵🇦', 'Paraguay': '🇵🇾', 'Portogallo': '🇵🇹',
       'Qatar': '🇶🇦', 'Repubblica Ceca': '🇨🇿', 'Scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳',
       'Spagna': '🇪🇸', 'Sud Africa': '🇿🇦', 'Svezia': '🇸🇪', 'Svizzera': '🇨🇭',
-      'Tunisia': '🇹🇳', 'Turchia': '🇹🇷', 'Uruguay': '🇺🇾', 'USA': '🇺🇸',
+      'Tunisia': '🇹🇳', 'Turchia': '🇹🇷', 'Uruguay': '🇺🇾', 'Usa': '🇺🇸',
       'Uzbekistan': '🇺🇿',
     };
     return '$cleanCountry ${flags[cleanCountry] ?? '🏳️'}';

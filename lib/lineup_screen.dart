@@ -240,12 +240,15 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   String _getFlagOnly(String country) {
-    final String cleanCountry = country.trim(); 
+    final String cleanCountry = country
+        .trim()
+        .replaceAll('’', '\'')
+        .replaceAll('`', '\''); 
     final Map<String, String> flags = {
       'Algeria': '🇩🇿', 'Arabia Saudita': '🇸🇦', 'Argentina': '🇦🇷', 'Australia': '🇦🇺',
       'Austria': '🇦🇹', 'Belgio': '🇧🇪', 'Bosnia e Herzegovina': '🇧🇦', 'Brasile': '🇧🇷',
       'Canada': '🇨🇦', 'Capo Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Congo': '🇨🇩', 
-      'Congo DR': '🇨🇩', 'Corea': '🇰🇷', 'Costa d\'avorio': '🇨🇮', 'Croazia': '🇭🇷',
+      'Congo DR': '🇨🇩', 'Corea': '🇰🇷', 'Costa D\'avorio': '🇨🇮', 'Croazia': '🇭🇷',
       'Curacao': '🇨🇼', 'Curaçao': '🇨🇼', 'Ecuador': '🇪🇨', 'Egitto': '🇪🇬',
       'Francia': '🇫🇷', 'Germania': '🇩🇪', 'Ghana': '🇬🇭', 'Giappone': '🇯🇵',
       'Giordania': '🇯🇴', 'Haiti': '🇭🇹', 'Inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Iran': '🇮🇷',
@@ -254,9 +257,10 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       'Paesi Bassi': '🇳🇱', 'Panama': '🇵🇦', 'Paraguay': '🇵🇾', 'Portogallo': '🇵🇹',
       'Qatar': '🇶🇦', 'Repubblica Ceca': '🇨🇿', 'Scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳',
       'Spagna': '🇪🇸', 'Sud Africa': '🇿🇦', 'Svezia': '🇸🇪', 'Svizzera': '🇨🇭',
-      'Tunisia': '🇹🇳', 'Turchia': '🇹🇷', 'Uruguay': '🇺🇾', 'USA': '🇺🇸',
+      'Tunisia': '🇹🇳', 'Turchia': '🇹🇷', 'Uruguay': '🇺🇾', 'Usa': '🇺🇸',
       'Uzbekistan': '🇺🇿',
     };
+
     return flags[cleanCountry] ?? '🏳️';
   }
 
@@ -303,36 +307,17 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     );
   }
 
+  // --- LO SLOT SUL CAMPO O IN PANCHINA CON LA PARTITA ---
   Widget _buildSlot(String role, Map<String, dynamic>? player, Function(Map<String, dynamic>?) onUpdate) {
-    if (player == null) {
-      return GestureDetector(
-        onTap: () => _showPlayerSelectionDialog(role, (p) {
-          setState(() { onUpdate(p); _syncRosterState(); });
-        }),
-        child: SizedBox(
-          width: 55,
-          child: Column(
-            children: [
-              CircleAvatar(radius: 20, backgroundColor: Colors.white.withValues(alpha: 0.5), child: Icon(Icons.add, color: _getRoleColor(role))),
-              const SizedBox(height: 4),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.8), borderRadius: BorderRadius.circular(4)),
-                child: const Text('Vuoto', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87)),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
+    bool isEmpty = player == null;
 
     return GestureDetector(
       onTap: () => _showPlayerSelectionDialog(role, (p) {
-        if (p != null) setState(() { onUpdate(p); _syncRosterState(); });
+        setState(() { onUpdate(p); _syncRosterState(); });
       }),
       onDoubleTap: () => setState(() { onUpdate(null); _syncRosterState(); }),
       onLongPress: () {
-        if (role != 'CT') { 
+        if (!isEmpty && role != 'CT') { 
           setState(() {
             if (player['is_captain'] == true) {
               player['is_captain'] = false;
@@ -343,34 +328,76 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           });
         }
       },
-      child: SizedBox(
-        width: 60,
+      child: Container(
+        width: 64, // Leggermente allargato per dare spazio al testo
+        margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
           children: [
             Stack(
               clipBehavior: Clip.none,
+              alignment: Alignment.center,
               children: [
-                CircleAvatar(
-                  radius: 22,
-                  backgroundColor: _getRoleColor(player['role']),
-                  child: Text(_getFlagOnly(player['national_team']), style: const TextStyle(fontSize: 18)),
+                Container(
+                  width: 44, height: 44,
+                  decoration: BoxDecoration(
+                    color: isEmpty ? Colors.black.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.6),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: _getRoleColor(role), width: 2.5),
+                    boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))],
+                  ),
+                  child: Center(
+                    child: isEmpty 
+                        ? const Icon(Icons.add, color: Colors.white70, size: 20,)
+                        : Text(_getFlagOnly(player['national_team']), style: const TextStyle(fontSize: 20)),
+                  ),
                 ),
-                if (player['is_captain'])
+                if (!isEmpty && player['is_captain'])
                   Positioned(
                     bottom: -2, right: -2,
                     child: Container(
                       padding: const EdgeInsets.all(2),
-                      decoration: const BoxDecoration(color: Colors.amber, shape: BoxShape.circle),
-                      child: const Icon(Icons.stars, size: 14, color: Colors.black),
+                      decoration: BoxDecoration(color: Colors.amber, shape: BoxShape.circle, border: Border.all(color: Colors.amber, width: 1.5)),
+                      child: const Icon(Icons.star, size: 12, color: Colors.black),
                     ),
                   ),
               ],
             ),
             const SizedBox(height: 4),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.95), borderRadius: BorderRadius.circular(4), boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 2)]),
-              child: Text(player['name'], style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87), overflow: TextOverflow.ellipsis, maxLines: 1),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.95), 
+                borderRadius: BorderRadius.circular(6), 
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 2)]
+              ),
+              child: isEmpty
+                  ? const Center(
+                      child: Padding(
+                        padding: EdgeInsets.symmetric(vertical: 4),
+                        child: Text('Vuoto', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87)),
+                      ),
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          player['name'],
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
+                        ),
+                        // --- NUOVA RIGA DELLA PARTITA (es. Ita - Fra) ---
+                        Text(
+                          player['match'] ?? '',
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 8, color: Colors.black54, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
             ),
           ],
         ),

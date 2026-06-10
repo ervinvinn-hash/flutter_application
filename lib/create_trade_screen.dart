@@ -95,7 +95,7 @@ class _CreateTradeScreenState extends State<CreateTradeScreen> {
   Future<void> _sendTradeProposal() async {
     if (targetTeamId == null) return;
     if (selectedMyPlayers.isEmpty || selectedTargetPlayers.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Devi selezionare almeno un giocatore da offrire e uno da richiedere!')));
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seleziona almeno un giocatore da offrire e uno da richiedere!')));
       return;
     }
 
@@ -132,61 +132,133 @@ class _CreateTradeScreenState extends State<CreateTradeScreen> {
     }
   }
 
-  Widget _buildRosterList(List<Map<String, dynamic>> roster, Set<int> selectedSet, Color activeColor) {
-    if (roster.isEmpty) {
-      return const Center(child: Text('Rosa vuota', style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic)));
+  // --- POPUP PER LA SELEZIONE GIOCATORI ---
+  Future<void> _showSelectionDialog(bool isMyTeam) async {
+    if (!isMyTeam && targetTeamId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Seleziona prima la squadra avversaria!')));
+      return;
     }
-    return ListView.builder(
-      padding: EdgeInsets.zero,
-      itemCount: roster.length,
-      itemBuilder: (ctx, i) {
-        final p = roster[i];
-        final isSelected = selectedSet.contains(p['player_id']);
-        
-        return Container(
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2))),
-          ),
-          child: CheckboxListTile(
-            // AUMENTATO IL PADDING per staccare il testo dal bordo sinistro
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            dense: true,
-            value: isSelected,
-            activeColor: activeColor,
-            checkColor: Colors.white,
-            onChanged: (bool? val) {
-              setState(() {
-                if (val == true) { selectedSet.add(p['player_id']); } 
-                else { selectedSet.remove(p['player_id']); }
-              });
-            },
-            title: Row(
-              children: [
-                CircleAvatar(
-                  radius: 10,
-                  backgroundColor: _getRoleColor(p['role']),
-                  child: Text(p['role'], style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                // Aumentato anche qui lo spazio tra il pallino del ruolo e il nome
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    p['name'], 
-                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87),
-                    overflow: TextOverflow.ellipsis,
+
+    List<Map<String, dynamic>> roster = isMyTeam ? myRoster : targetRoster;
+    Set<int> currentSelection = Set.from(isMyTeam ? selectedMyPlayers : selectedTargetPlayers);
+    Color themeColor = isMyTeam ? Colors.blue[800]! : Colors.red[800]!;
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (BuildContext context, StateSetter setModalState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.7,
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.95),
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 40, height: 5, margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    decoration: BoxDecoration(color: Colors.grey[400], borderRadius: BorderRadius.circular(10)),
                   ),
-                ),
-              ],
-            ),
-            subtitle: Text('${p['purchase_price']} cr', style: const TextStyle(fontSize: 11, color: Colors.black54)),
-          ),
+                  Text(isMyTeam ? 'Seleziona chi offri' : 'Seleziona chi richiedi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: themeColor)),
+                  const Divider(thickness: 1.5),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: roster.length,
+                      itemBuilder: (context, index) {
+                        final p = roster[index];
+                        final isSelected = currentSelection.contains(p['player_id']);
+                        return CheckboxListTile(
+                          activeColor: themeColor,
+                          value: isSelected,
+                          onChanged: (bool? val) {
+                            setModalState(() {
+                              if (val == true) currentSelection.add(p['player_id']);
+                              else currentSelection.remove(p['player_id']);
+                            });
+                          },
+                          title: Row(
+                            children: [
+                              CircleAvatar(
+                                radius: 12, backgroundColor: _getRoleColor(p['role']),
+                                child: Text(p['role'], style: const TextStyle(fontSize: 10, color: Colors.white, fontWeight: FontWeight.bold)),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(p['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14))),
+                            ],
+                          ),
+                          subtitle: Text('${p['purchase_price']} cr', style: const TextStyle(color: Colors.black54, fontSize: 12)),
+                        );
+                      },
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        minimumSize: const Size.fromHeight(50),
+                        backgroundColor: themeColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      onPressed: () => Navigator.pop(ctx),
+                      child: const Text('CONFERMA SELEZIONE', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    ),
+                  )
+                ],
+              ),
+            );
+          }
         );
-      },
+      }
+    );
+
+    setState(() {
+      if (isMyTeam) {
+        selectedMyPlayers = currentSelection;
+      } else {
+        selectedTargetPlayers = currentSelection;
+      }
+    });
+  }
+
+  // --- CHIP IN STILE VETRO PER I GIOCATORI SELEZIONATI ---
+  Widget _buildGlassChip(Map<String, dynamic> player, VoidCallback onRemove) {
+    return Container(
+      margin: const EdgeInsets.only(right: 8, bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.85),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
+        boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          CircleAvatar(
+            radius: 10, backgroundColor: _getRoleColor(player['role']),
+            child: Text(player['role'], style: const TextStyle(fontSize: 9, color: Colors.white, fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 6),
+          Text(player['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87)),
+          const SizedBox(width: 4),
+          GestureDetector(
+            onTap: onRemove,
+            child: const Icon(Icons.cancel, size: 18, color: Colors.redAccent),
+          ),
+        ],
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    List<Map<String, dynamic>> mySelectedList = myRoster.where((p) => selectedMyPlayers.contains(p['player_id'])).toList();
+    List<Map<String, dynamic>> targetSelectedList = targetRoster.where((p) => selectedTargetPlayers.contains(p['player_id'])).toList();
+
     return Scaffold(
       extendBodyBehindAppBar: true, 
       appBar: AppBar(
@@ -210,107 +282,141 @@ class _CreateTradeScreenState extends State<CreateTradeScreen> {
               ? const Center(child: CircularProgressIndicator(color: Colors.amberAccent))
               : Column(
                   children: [
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                      child: Text(
-                        'Seleziona chi vuoi cedere e chi vuoi in cambio',
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.white70, fontSize: 14, fontStyle: FontStyle.italic),
-                      ),
-                    ),
+                    // --- PANNELLO SUPERIORE: LA TUA SQUADRA ---
                     Expanded(
-                      child: Row(
-                        children: [
-                          // --- PANNELLO SINISTRO: LA TUA SQUADRA ---
-                          Expanded(
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 12, right: 6, bottom: 12),
+                      child: Container(
+                        margin: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.blue[300]!.withValues(alpha: 0.5), width: 2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))],
+                                color: Colors.blue[800]!.withValues(alpha: 0.9),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
                               ),
-                              child: Column(
-                                children: [
-                                  // STRISCIA BLU A ALTEZZA FISSA
-                                  Container(
-                                    width: double.infinity,
-                                    height: 48, // ALTEZZA FISSA IMPOSTATA QUI
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: Colors.blue[800],
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                    ),
-                                    child: const Text('TU OFFRI', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1)),
-                                  ),
-                                  Expanded(child: _buildRosterList(myRoster, selectedMyPlayers, Colors.blue[800]!)),
-                                ],
-                              ),
+                              child: const Text('LA TUA SQUADRA (OFFRI)', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 1.2)),
                             ),
-                          ),
-                          
-                          // --- PANNELLO DESTRO: L'AVVERSARIO ---
-                          Expanded(
-                            child: Container(
-                              margin: const EdgeInsets.only(left: 6, right: 12, bottom: 12),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                borderRadius: BorderRadius.circular(20),
-                                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))],
-                              ),
-                              child: Column(
-                                children: [
-                                  // STRISCIA ROSSA A ALTEZZA FISSA (IDENTICA A QUELLA BLU)
-                                  Container(
-                                    width: double.infinity,
-                                    height: 48, // ALTEZZA FISSA IMPOSTATA QUI
-                                    alignment: Alignment.center,
-                                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red[800],
-                                      borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                                    ),
-                                    child: DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        isExpanded: true,
-                                        dropdownColor: Colors.red[50],
-                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                                        hint: const Text('Scegli Avversario', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
-                                        value: targetTeamId,
-                                        items: otherTeams.map((t) {
-                                          return DropdownMenuItem<String>(
-                                            value: t['id'],
-                                            child: Text(t['team_name'], style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.black87)),
-                                          );
-                                        }).toList(),
-                                        onChanged: (val) {
-                                          setState(() => targetTeamId = val);
-                                          _fetchRoster(val!, isMyRoster: false);
-                                        },
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: mySelectedList.isEmpty 
+                                  ? const Center(child: Text('Nessun giocatore selezionato.', style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)))
+                                  : SingleChildScrollView(
+                                      child: Wrap(
+                                        children: mySelectedList.map((p) => _buildGlassChip(p, () {
+                                          setState(() => selectedMyPlayers.remove(p['player_id']));
+                                        })).toList(),
                                       ),
                                     ),
-                                  ),
-                                  Expanded(
-                                    child: targetTeamId == null
-                                        ? const Center(child: Text('Seleziona una squadra', textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, fontSize: 12)))
-                                        : _buildRosterList(targetRoster, selectedTargetPlayers, Colors.red[800]!),
-                                  ),
-                                ],
                               ),
                             ),
-                          ),
-                        ],
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: ElevatedButton.icon(
+                                onPressed: () => _showSelectionDialog(true),
+                                icon: const Icon(Icons.add_circle_outline),
+                                label: const Text('Scegli Giocatori', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.9),
+                                  foregroundColor: Colors.blue[900],
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    const Icon(Icons.swap_vert, color: Colors.white70, size: 36),
+
+                    // --- PANNELLO INFERIORE: SQUADRA AVVERSARIA ---
+                    Expanded(
+                      child: Container(
+                        margin: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: Colors.red[300]!.withValues(alpha: 0.5), width: 2),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 12),
+                              decoration: BoxDecoration(
+                                color: Colors.red[800]!.withValues(alpha: 0.9),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<String>(
+                                  isExpanded: true,
+                                  dropdownColor: Colors.red[900],
+                                  icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                                  hint: const Text('Seleziona Avversario (RICHIEDI)', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+                                  value: targetTeamId,
+                                  style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 16),
+                                  items: otherTeams.map((t) {
+                                    return DropdownMenuItem<String>(value: t['id'], child: Text(t['team_name']));
+                                  }).toList(),
+                                  onChanged: (val) {
+                                    setState(() {
+                                      targetTeamId = val;
+                                      selectedTargetPlayers.clear();
+                                    });
+                                    _fetchRoster(val!, isMyRoster: false);
+                                  },
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: Padding(
+                                padding: const EdgeInsets.all(12.0),
+                                child: targetTeamId == null 
+                                  ? const Center(child: Text('Seleziona una squadra avversaria.', style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)))
+                                  : targetSelectedList.isEmpty
+                                    ? const Center(child: Text('Nessun giocatore selezionato.', style: TextStyle(color: Colors.white70, fontStyle: FontStyle.italic)))
+                                    : SingleChildScrollView(
+                                        child: Wrap(
+                                          children: targetSelectedList.map((p) => _buildGlassChip(p, () {
+                                            setState(() => selectedTargetPlayers.remove(p['player_id']));
+                                          })).toList(),
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            Padding(
+                              padding: const EdgeInsets.all(12.0),
+                              child: ElevatedButton.icon(
+                                onPressed: targetTeamId == null ? null : () => _showSelectionDialog(false),
+                                icon: const Icon(Icons.add_circle_outline),
+                                label: const Text('Scegli Giocatori', style: TextStyle(fontWeight: FontWeight.bold)),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.9),
+                                  foregroundColor: Colors.red[900],
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                     
-                    // --- BOTTONE INVIA PROPOSTA (STILE VIP) ---
+                    // --- BOTTONE INVIA PROPOSTA ---
                     Padding(
                       padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
                       child: ElevatedButton(
                         onPressed: isSending || selectedMyPlayers.isEmpty || selectedTargetPlayers.isEmpty ? null : _sendTradeProposal,
                         style: ElevatedButton.styleFrom(
                           minimumSize: const Size.fromHeight(55),
-                          backgroundColor: Colors.amberAccent,
+                          backgroundColor: Colors.orange[800],
                           foregroundColor: Colors.black87,
                           elevation: 8,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
