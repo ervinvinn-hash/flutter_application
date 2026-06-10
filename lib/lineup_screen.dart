@@ -16,6 +16,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   late TabController _tabController;
   bool isLoading = true;
   bool isSaving = false;
+  bool _isBenchExpanded = false; // Controllo per la panchina a scomparsa
   
   List<Map<String, dynamic>> roster = [];
 
@@ -414,8 +415,8 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
 
   Widget _buildTabCampo() {
     return Container(
-      decoration: BoxDecoration(
-        image: const DecorationImage(
+      decoration: const BoxDecoration(
+        image: DecorationImage(
           image: AssetImage('assets/foto_campo.png'),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
@@ -430,15 +431,15 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 40.0, left: 40.0, right: 40.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 40.0, left: 50.0, right: 50.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 40.0, right: 40.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 12.0, left: 40.0, right: 40.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
                 ),
                 Row(
@@ -460,8 +461,10 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             ),
           ),
           
-          // LA PANCHINA (BOX FLUTTUANTE CON BACKGROUND CHE SCORRE DIETRO)
-          Container(
+          // LA PANCHINA (BOX FLUTTUANTE A SCOMPARSA PARZIALE)
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
             margin: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.9),
@@ -471,25 +474,53 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
-                  child: Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
+                InkWell(
+                  onTap: () {
+                    setState(() {
+                      _isBenchExpanded = !_isBenchExpanded;
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: 8.0, bottom: 8.0, right: 8.0, top: 4.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
+                        Icon(
+                          _isBenchExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, 
+                          color: Colors.black54
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(5, (index) {
-                    return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
-                  }),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
-                    const SizedBox(width: 40),
-                    _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
-                  ],
+                AnimatedCrossFade(
+                  firstChild: const SizedBox(width: double.infinity, height: 0),
+                  secondChild: Column(
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                        children: List.generate(5, (index) {
+                          return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
+                        }),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
+                          const SizedBox(width: 40),
+                          _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                        ],
+                      ),
+                    ],
+                  ),
+                  crossFadeState: _isBenchExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
+                  duration: const Duration(milliseconds: 300),
+                  sizeCurve: Curves.easeInOutCubic,
                 ),
               ],
             ),
