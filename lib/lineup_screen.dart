@@ -283,38 +283,67 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     }
   }
 
+String _getCountrySigla(String country) {
+    if (country.isEmpty || country == '???') return '???';
+    final String cleanCountry = country.trim().toLowerCase();
+
+    if (cleanCountry.contains('usa') || cleanCountry.contains('stati uniti')) return 'USA';
+    if (cleanCountry.contains('avorio')) return 'CIV';
+
+    final Map<String, String> sigle = {
+      'algeria': 'ALG', 'arabia saudita': 'KSA', 'argentina': 'ARG', 'australia': 'AUS',
+      'austria': 'AUT', 'belgio': 'BEL', 'bosnia e herzegovina': 'BIH', 'bosnia': 'BIH',
+      'brasile': 'BRA', 'canada': 'CAN', 'capo verde': 'CPV', 'colombia': 'COL', 
+      'congo': 'CGO', 'congo dr': 'COD', 'corea': 'KOR', 'corea del sud': 'KOR', 
+      'croazia': 'CRO', 'curacao': 'CUW', 'curaçao': 'CUW', 'ecuador': 'ECU', 
+      'egitto': 'EGY', 'francia': 'FRA', 'germania': 'GER', 'ghana': 'GHA', 
+      'giappone': 'JPN', 'giordania': 'JOR', 'haiti': 'HAI', 'inghilterra': 'ENG', 
+      'iran': 'IRN', 'iraq': 'IRQ', 'italia': 'ITA', 'marocco': 'MAR', 'morocco': 'MAR', 
+      'messico': 'MEX', 'norvegia': 'NOR', 'nuova zelanda': 'NZL', 'olanda': 'NED', 
+      'paesi bassi': 'NED', 'panama': 'PAN', 'paraguay': 'PAR', 'portogallo': 'POR', 
+      'qatar': 'QAT', 'repubblica ceca': 'CZE', 'scozia': 'SCO', 'senegal': 'SEN', 
+      'spagna': 'ESP', 'sud africa': 'RSA', 'svezia': 'SWE', 'svizzera': 'SUI', 
+      'tunisia': 'TUN', 'turchia': 'TUR', 'uruguay': 'URU', 'uzbekistan': 'UZB',
+    };
+
+    if (sigle.containsKey(cleanCountry)) return sigle[cleanCountry]!;
+    
+    // Se non trova la nazione nella mappa, prende le prime 3 lettere in maiuscolo come fallback
+    return cleanCountry.length >= 3 ? cleanCountry.substring(0, 3).toUpperCase() : cleanCountry.toUpperCase();
+  }
+
   void _copyLineupToClipboard() {
-    _syncRosterState();
+    _syncRosterState(); //
     StringBuffer sb = StringBuffer();
     
-    sb.writeln(widget.teamName);
-    sb.writeln('Allenatore:');
+    sb.writeln(widget.teamName); //
+    sb.writeln('Allenatore:'); //
     
-    if (fieldCoach != null) {
-      sb.writeln('ALL - ${fieldCoach!['name']} (${fieldCoach!['national_team']})');
+    if (fieldCoach != null) { //
+      sb.writeln('ALL - ${fieldCoach!['name']} (${_getCountrySigla(fieldCoach!['national_team'])})');
     } else {
-      sb.writeln('ALL - Nessun Allenatore');
+      sb.writeln('ALL - Nessun Allenatore'); //
     }
 
-    sb.writeln('Titolari:');
-    final roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5};
-    List<Map<String, dynamic>> titolari = roster.where((p) => p['is_starter'] && p['role'] != 'CT').toList();
-    titolari.sort((a, b) => roleOrder[a['role']]!.compareTo(roleOrder[b['role']]!));
+    sb.writeln('Titolari:'); //
+    final roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5}; //
+    List<Map<String, dynamic>> titolari = roster.where((p) => p['is_starter'] && p['role'] != 'CT').toList(); //
+    titolari.sort((a, b) => roleOrder[a['role']]!.compareTo(roleOrder[b['role']]!)); //
     
     for (var p in titolari) {
-      String capTag = p['is_captain'] ? ' [C]' : '';
-      sb.writeln('${p['role']} - ${p['name']} (${p['national_team']})$capTag');
+      String capTag = p['is_captain'] ? ' [C]' : ''; //
+      sb.writeln('${p['role']} - ${p['name']} (${_getCountrySigla(p['national_team'])})$capTag');
     }
 
-    sb.writeln('Panchina:');
-    for (var p in benchPlayers) {
-      if (p != null) {
-        sb.writeln('${p['role']} - ${p['name']} (${p['national_team']})');
+    sb.writeln('Panchina:'); //
+    for (var p in benchPlayers) { //
+      if (p != null) { //
+        sb.writeln('${p['role']} - ${p['name']} (${_getCountrySigla(p['national_team'])})');
       }
     }
 
-    Clipboard.setData(ClipboardData(text: sb.toString()));
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Formazione copiata negli appunti! 📋'), backgroundColor: Colors.orange[800]));
+    Clipboard.setData(ClipboardData(text: sb.toString())); //
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Formazione copiata negli appunti! 📋'), backgroundColor: Colors.orange[800])); //
   }
 
   Color _getRoleColor(String role) {
@@ -801,7 +830,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                       constraints: const BoxConstraints(),
                                       onPressed: () => _saveLineup(forceSave: true),
                                     ),
-                                    const SizedBox(width: 20),
+                                    const SizedBox(width: 14),
                                     IconButton(
                                       icon: Icon(Icons.share, color: Colors.orange[800], size: 24),
                                       tooltip: 'Copia formazione',
