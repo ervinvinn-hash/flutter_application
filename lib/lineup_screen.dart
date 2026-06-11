@@ -551,11 +551,11 @@ String _getCountrySigla(String country) {
                   child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 40.0, right: 40.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 12.0, left: 40.0, right: 40.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
                 ),
                 Row(
@@ -830,7 +830,7 @@ String _getCountrySigla(String country) {
                                       constraints: const BoxConstraints(),
                                       onPressed: () => _saveLineup(forceSave: true),
                                     ),
-                                    const SizedBox(width: 14),
+                                    const SizedBox(width: 8),
                                     IconButton(
                                       icon: Icon(Icons.share, color: Colors.orange[800], size: 24),
                                       tooltip: 'Copia formazione',
