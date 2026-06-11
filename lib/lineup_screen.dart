@@ -550,36 +550,63 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           
           // LA PANCHINA
           Container(
-            margin: const EdgeInsets.all(12),
+            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.9),
+              color: Colors.white.withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))],
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.2), 
+                  blurRadius: 8, 
+                  offset: const Offset(0, 4)
+                )
+              ],
             ),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
-                  child: Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
-                ),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: List.generate(5, (index) {
-                    return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
-                  }),
-                ),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
+            child: Theme(
+              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+              child: ExpansionTile(
+                initiallyExpanded: false, // Parte chiusa di default per preservare spazio
+                iconColor: Colors.orange[800],
+                collapsedIconColor: Colors.black54,
+                title: const Row(
                   children: [
-                    _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
-                    const SizedBox(width: 40),
-                    _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                    Icon(Icons.airline_seat_recline_normal, color: Colors.black54, size: 20),
+                    SizedBox(width: 8),
+                    Text(
+                      'PANCHINA', 
+                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54, letterSpacing: 0.5)
+                    ),
                   ],
                 ),
-              ],
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                    child: Column(
+                      children: [
+                        const Divider(height: 1, thickness: 1),
+                        const SizedBox(height: 12),
+                        // Prima riga panchina (Primi 5 slot)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: List.generate(5, (index) {
+                            return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
+                          }),
+                        ),
+                        const SizedBox(height: 12),
+                        // Seconda riga panchina (Ultimi 2 slot centrate)
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
+                            const SizedBox(width: 32),
+                            _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           )
         ],
