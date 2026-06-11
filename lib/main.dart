@@ -12,6 +12,7 @@ import 'admin_settings_screen.dart';
 import 'admin_groups_screen.dart'; 
 import 'admin_trades_screen.dart';
 import 'trade_center_screen.dart';
+import 'Giornate_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -443,6 +444,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 
+                // --- INIZIO BOTTONE CALENDARIO MONDIALI ---
+Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+  child: InkWell(
+    onTap: () {
+      Navigator.push(
+        context, 
+        MaterialPageRoute(builder: (context) => const GiornateScreen()),
+      );
+    },
+    borderRadius: BorderRadius.circular(16),
+    child: Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+      decoration: BoxDecoration(
+        // Un gradiente arancione in stile VIP FantaMondiale
+        gradient: LinearGradient(
+          colors: [Colors.orange[800]!, Colors.orange[600]!],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.orange.withValues(alpha: 0.4), 
+            blurRadius: 8, 
+            offset: const Offset(0, 4)
+          ),
+        ],
+      ),
+      child: const Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.calendar_month, color: Colors.white, size: 28),
+          SizedBox(width: 12),
+          Text(
+            'CALENDARIO MONDIALI',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    ),
+  ),
+),
+// --- FINE BOTTONE CALENDARIO MONDIALI ---
+
                 // --- SEZIONE ADMIN ---
                 if (widget.isAdmin) ...[
                   const SizedBox(height: 40),

@@ -16,7 +16,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   late TabController _tabController;
   bool isLoading = true;
   bool isSaving = false;
-  bool _isBenchExpanded = false; // Controllo per la panchina a scomparsa
   
   List<Map<String, dynamic>> roster = [];
 
@@ -29,7 +28,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   Map<String, dynamic>? fieldP;
   Map<String, dynamic>? fieldCoach;
 
-  // I 7 slot rigorosi della panchina
   final List<String> benchRoles = ['P', 'D', 'D', 'C', 'C', 'A', 'A'];
   List<Map<String, dynamic>?> benchPlayers = List.filled(7, null);
 
@@ -48,27 +46,117 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
 
   Future<void> _fetchRoster() async {
     try {
-      final rosterData = await Supabase.instance.client.from('roster_players').select().eq('team_id', widget.teamId);
-      final playersData = await Supabase.instance.client.from('players').select('id, name, role, national_team');
+      final client = Supabase.instance.client;
+      final rosterData = await client.from('roster_players').select().eq('team_id', widget.teamId);
+      final playersData = await client.from('players').select('id, name, role, national_team');
       
+      // --- IL NUOVO MOTORE DEL CALENDARIO ---
+      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true);
+      
+      int currentMatchday = 1;
+      final now = DateTime.now();
+      
+      try {
+        var upcomingMatch = matchesData.firstWhere((m) {
+          DateTime kickoff = DateTime.parse(m['kickoff_time']);
+          return kickoff.add(const Duration(hours: 2)).isAfter(now);
+        });
+        currentMatchday = upcomingMatch['matchday'];
+      } catch (e) {
+        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
+      }
+
+      Map<String, String> teamMatches = {};
+      for (var m in matchesData) {
+        if (m['matchday'] == currentMatchday) {
+          String home = m['home_team'];
+          String away = m['away_team'];
+          
+          String siglaHome = home.length >= 3 ? home.substring(0, 3).toUpperCase() : home.toUpperCase();
+          String siglaAway = away.length >= 3 ? away.substring(0, 3).toUpperCase() : away.toUpperCase();
+          String matchString = '$siglaHome - $siglaAway';
+          
+          teamMatches[home] = matchString;
+          teamMatches[away] = matchString;
+        }
+      }
+      
+      // --- NUOVO: RECUPERO E CALCOLO STATISTICHE REALI ---
+      // Estrapoliamo gli ID dei giocatori in rosa per scaricare solo i loro voti
+      List<int> rosterIds = rosterData.map<int>((r) => r['player_id'] as int).toList();
+      
+      List<dynamic> statsData = [];
+      if (rosterIds.isNotEmpty) {
+        statsData = await client.from('matchday_stats').select().inFilter('player_id', rosterIds);
+      }
+
+      // Dizionario per accumulare le statistiche: playerId -> {statistiche aggregate}
+      Map<int, Map<String, dynamic>> aggregatedStats = {
+        for (var id in rosterIds)
+          id: { 'apps': 0, 'goals': 0, 'assists': 0, 'yellows': 0, 'reds': 0, 'sum_mv': 0.0, 'sum_fm': 0.0 }
+      };
+
+      for (var stat in statsData) {
+        int pId = stat['player_id'];
+        if (aggregatedStats.containsKey(pId)) {
+          var ag = aggregatedStats[pId]!;
+          ag['apps'] += 1;
+          ag['goals'] += stat['goals_scored'] ?? 0;
+          ag['assists'] += stat['assists'] ?? 0;
+          ag['yellows'] += stat['yellow_cards'] ?? 0;
+          ag['reds'] += stat['red_cards'] ?? 0;
+
+          double mv = (stat['base_grade'] as num).toDouble();
+          ag['sum_mv'] += mv;
+
+          // Calcolo FantaVoto Dinamico con Bonus/Malus
+          double fm = mv;
+          fm += (stat['goals_scored'] ?? 0) * 3.0;
+          fm += (stat['assists'] ?? 0) * 1.0;
+          fm -= (stat['yellow_cards'] ?? 0) * 0.5;
+          fm -= (stat['red_cards'] ?? 0) * 1.0;
+          fm -= (stat['own_goals'] ?? 0) * 2.0;
+          fm += (stat['penalty_saved'] ?? 0) * 3.0;
+          fm -= (stat['penalty_missed'] ?? 0) * 3.0;
+          if (stat['clean_sheet'] == true) fm += 1.0; // Bonus porta inviolata
+          
+          ag['sum_fm'] += fm;
+        }
+      }
+      // ---------------------------------------------------
+
       Map<int, Map<String, dynamic>> playersMap = { for (var p in playersData) p['id']: p };
 
       List<Map<String, dynamic>> loadedRoster = [];
       for (var row in rosterData) {
         int pId = row['player_id'];
         if (playersMap.containsKey(pId)) {
+          String nTeam = playersMap[pId]!['national_team'] ?? '???';
+          
+          // Estrapoliamo i calcoli finali per questo giocatore
+          var ag = aggregatedStats[pId]!;
+          int apps = ag['apps'];
+          double mediaVoto = apps > 0 ? ag['sum_mv'] / apps : 0.0;
+          double fantaMedia = apps > 0 ? ag['sum_fm'] / apps : 0.0;
+          
           loadedRoster.add({
             'player_id': pId,
             'name': playersMap[pId]!['name'],
             'role': playersMap[pId]!['role'],
-            'national_team': playersMap[pId]!['national_team'] ?? '???',
+            'national_team': nTeam,
             'is_starter': row['is_starter'] ?? false,
             'is_bench': row['is_bench'] ?? false,
             'is_captain': row['is_captain'] ?? false,
+            'match': teamMatches[nTeam] ?? 'Riposo', 
             
-            // DATI SIMULATI PER LA UI
-            'match': 'Ita - Fra', 
-            'apps': 0, 'goals': 0, 'assists': 0, 'yellows': 0, 'reds': 0, 'mv': 6.00, 'fm': 6.00,
+            // ASSEGNAZIONE DELLE STATISTICHE REALI!
+            'apps': apps, 
+            'goals': ag['goals'], 
+            'assists': ag['assists'], 
+            'yellows': ag['yellows'], 
+            'reds': ag['reds'], 
+            'mv': mediaVoto, 
+            'fm': fantaMedia,
           });
         }
       }
@@ -241,25 +329,26 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   String _getFlagOnly(String country) {
-    final String cleanCountry = country
-        .trim()
-        .replaceAll('’', '\'')
-        .replaceAll('`', '\''); 
+    if (country.isEmpty || country == '???') return '🏳️';
+    final String cleanCountry = country.trim().toLowerCase().replaceAll('’', '\'').replaceAll('`', '\''); 
+
+    if (cleanCountry.contains('usa') || cleanCountry.contains('stati uniti')) return '🇺🇸';
+    if (cleanCountry.contains('avorio')) return '🇨🇮';
+
     final Map<String, String> flags = {
-      'Algeria': '🇩🇿', 'Arabia Saudita': '🇸🇦', 'Argentina': '🇦🇷', 'Australia': '🇦🇺',
-      'Austria': '🇦🇹', 'Belgio': '🇧🇪', 'Bosnia e Herzegovina': '🇧🇦', 'Brasile': '🇧🇷',
-      'Canada': '🇨🇦', 'Capo Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Congo': '🇨🇩', 
-      'Congo DR': '🇨🇩', 'Corea': '🇰🇷', 'Costa D\'avorio': '🇨🇮', 'Croazia': '🇭🇷',
-      'Curacao': '🇨🇼', 'Curaçao': '🇨🇼', 'Ecuador': '🇪🇨', 'Egitto': '🇪🇬',
-      'Francia': '🇫🇷', 'Germania': '🇩🇪', 'Ghana': '🇬🇭', 'Giappone': '🇯🇵',
-      'Giordania': '🇯🇴', 'Haiti': '🇭🇹', 'Inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Iran': '🇮🇷',
-      'Iraq': '🇮🇶', 'Italia': '🇮🇹', 'Marocco': '🇲🇦', 'Morocco': '🇲🇦',
-      'Messico': '🇲🇽', 'Norvegia': '🇳🇴', 'Nuova Zelanda': '🇳🇿', 'Olanda': '🇳🇱',
-      'Paesi Bassi': '🇳🇱', 'Panama': '🇵🇦', 'Paraguay': '🇵🇾', 'Portogallo': '🇵🇹',
-      'Qatar': '🇶🇦', 'Repubblica Ceca': '🇨🇿', 'Scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳',
-      'Spagna': '🇪🇸', 'Sud Africa': '🇿🇦', 'Svezia': '🇸🇪', 'Svizzera': '🇨🇭',
-      'Tunisia': '🇹🇳', 'Turchia': '🇹🇷', 'Uruguay': '🇺🇾', 'Usa': '🇺🇸',
-      'Uzbekistan': '🇺🇿',
+      'algeria': '🇩🇿', 'arabia saudita': '🇸🇦', 'argentina': '🇦🇷', 'australia': '🇦🇺',
+      'austria': '🇦🇹', 'belgio': '🇧🇪', 'bosnia e herzegovina': '🇧🇦', 'bosnia': '🇧🇦',
+      'brasile': '🇧🇷', 'canada': '🇨🇦', 'capo verde': '🇨🇻', 'colombia': '🇨🇴', 
+      'congo': '🇨🇩', 'congo dr': '🇨🇩', 'corea': '🇰🇷', 'corea del sud': '🇰🇷', 
+      'croazia': '🇭🇷', 'curacao': '🇨🇼', 'curaçao': '🇨🇼', 'ecuador': '🇪🇨', 
+      'egitto': '🇪🇬', 'francia': '🇫🇷', 'germania': '🇩🇪', 'ghana': '🇬🇭', 
+      'giappone': '🇯🇵', 'giordania': '🇯🇴', 'haiti': '🇭🇹', 'inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 
+      'iran': '🇮🇷', 'iraq': '🇮🇶', 'italia': '🇮🇹', 'marocco': '🇲🇦', 'morocco': '🇲🇦', 
+      'messico': '🇲🇽', 'norvegia': '🇳🇴', 'nuova zelanda': '🇳🇿', 'olanda': '🇳🇱', 
+      'paesi bassi': '🇳🇱', 'panama': '🇵🇦', 'paraguay': '🇵🇾', 'portogallo': '🇵🇹', 
+      'qatar': '🇶🇦', 'repubblica ceca': '🇨🇿', 'scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'senegal': '🇸🇳', 
+      'spagna': '🇪🇸', 'sud africa': '🇿🇦', 'svezia': '🇸🇪', 'svizzera': '🇨🇭', 
+      'tunisia': '🇹🇳', 'turchia': '🇹🇷', 'uruguay': '🇺🇾', 'uzbekistan': '🇺🇿',
     };
 
     return flags[cleanCountry] ?? '🏳️';
@@ -308,7 +397,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     );
   }
 
-  // --- LO SLOT SUL CAMPO O IN PANCHINA CON LA PARTITA ---
   Widget _buildSlot(String role, Map<String, dynamic>? player, Function(Map<String, dynamic>?) onUpdate) {
     bool isEmpty = player == null;
 
@@ -330,7 +418,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         }
       },
       child: Container(
-        width: 64, // Leggermente allargato per dare spazio al testo
+        width: 64,
         margin: const EdgeInsets.symmetric(horizontal: 2, vertical: 4),
         child: Column(
           children: [
@@ -341,14 +429,14 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                 Container(
                   width: 44, height: 44,
                   decoration: BoxDecoration(
-                    color: isEmpty ? Colors.black.withValues(alpha: 0.5) : Colors.white.withValues(alpha: 0.6),
+                    color: isEmpty ? Colors.black.withValues(alpha: 0.5) : Colors.white,
                     shape: BoxShape.circle,
                     border: Border.all(color: _getRoleColor(role), width: 2.5),
                     boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))],
                   ),
                   child: Center(
                     child: isEmpty 
-                        ? const Icon(Icons.add, color: Colors.white70, size: 20,)
+                        ? const Icon(Icons.add, color: Colors.white70, size: 20)
                         : Text(_getFlagOnly(player['national_team']), style: const TextStyle(fontSize: 20)),
                   ),
                 ),
@@ -357,7 +445,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                     bottom: -2, right: -2,
                     child: Container(
                       padding: const EdgeInsets.all(2),
-                      decoration: BoxDecoration(color: Colors.amber, shape: BoxShape.circle, border: Border.all(color: Colors.amber, width: 1.5)),
+                      decoration: BoxDecoration(color: Colors.amber, shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 1.5)),
                       child: const Icon(Icons.star, size: 12, color: Colors.black),
                     ),
                   ),
@@ -389,7 +477,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87),
                         ),
-                        // --- NUOVA RIGA DELLA PARTITA (es. Ita - Fra) ---
                         Text(
                           player['match'] ?? '',
                           textAlign: TextAlign.center,
@@ -415,8 +502,8 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
 
   Widget _buildTabCampo() {
     return Container(
-      decoration: const BoxDecoration(
-        image: DecorationImage(
+      decoration: BoxDecoration(
+        image: const DecorationImage(
           image: AssetImage('assets/foto_campo.png'),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
@@ -431,15 +518,15 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
                 Padding(
-                  padding: const EdgeInsets.only(top: 40.0, left: 50.0, right: 50.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 40.0, left: 40.0, right: 40.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 0.0, left: 40.0, right: 40.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
                 ),
                 Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
+                  padding: const EdgeInsets.only(top: 12.0, left: 40.0, right: 40.0, bottom: 0.0),
                   child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
                 ),
                 Row(
@@ -461,10 +548,8 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             ),
           ),
           
-          // LA PANCHINA (BOX FLUTTUANTE A SCOMPARSA PARZIALE)
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
+          // LA PANCHINA
+          Container(
             margin: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.9),
@@ -474,53 +559,25 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
               children: [
-                InkWell(
-                  onTap: () {
-                    setState(() {
-                      _isBenchExpanded = !_isBenchExpanded;
-                    });
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.only(left: 8.0, bottom: 8.0, right: 8.0, top: 4.0),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
-                        Icon(
-                          _isBenchExpanded ? Icons.keyboard_arrow_down : Icons.keyboard_arrow_up, 
-                          color: Colors.black54
-                        ),
-                      ],
-                    ),
-                  ),
+                const Padding(
+                  padding: EdgeInsets.only(left: 8.0, bottom: 8.0),
+                  child: Text('PANCHINA', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.black54)),
                 ),
-                AnimatedCrossFade(
-                  firstChild: const SizedBox(width: double.infinity, height: 0),
-                  secondChild: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                        children: List.generate(5, (index) {
-                          return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
-                        }),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
-                          const SizedBox(width: 40),
-                          _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
-                        ],
-                      ),
-                    ],
-                  ),
-                  crossFadeState: _isBenchExpanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
-                  duration: const Duration(milliseconds: 300),
-                  sizeCurve: Curves.easeInOutCubic,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: List.generate(5, (index) {
+                    return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
+                  }),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
+                    const SizedBox(width: 40),
+                    _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                  ],
                 ),
               ],
             ),
@@ -623,7 +680,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     return Container(
       decoration: BoxDecoration(
         image: DecorationImage(
-          image: const AssetImage('assets/sfondo.png'), // SFONDO GENERALE APP
+          image: const AssetImage('assets/sfondo.png'),
           fit: BoxFit.cover,
           colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.darken),
         ),
@@ -645,7 +702,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             ? const Center(child: CircularProgressIndicator(color: Colors.orange))
             : Column(
                 children: [
-                  // FLOATING BOX SUPERIORE
                   Container(
                     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     decoration: BoxDecoration(
@@ -656,13 +712,11 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        // RIGA SUPERIORE (SQUADRA - MODULO - BOTTONI)
                         Padding(
                           padding: const EdgeInsets.only(left: 16, right: 8, top: 12, bottom: 8),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // NOME SQUADRA
                               Expanded(
                                 flex: 3,
                                 child: Row(
@@ -679,7 +733,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                   ],
                                 ),
                               ),
-                              // BOX MODULO (Stile Box Crediti)
                               Container(
                                 padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 4),
                                 decoration: BoxDecoration(
@@ -709,7 +762,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                   ],
                                 ),
                               ),
-                              // BOTTONI SALVA E COPIA
                               Expanded(
                                 flex: 2,
                                 child: Row(
@@ -737,7 +789,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                             ],
                           ),
                         ),
-                        // TAB BAR (Inserita nel box fluttuante)
                         TabBar(
                           controller: _tabController,
                           indicatorColor: Colors.orange[800],
@@ -755,7 +806,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                     ),
                   ),
 
-                  // CONTENUTO TABS
                   Expanded(
                     child: TabBarView(
                       controller: _tabController,
@@ -781,7 +831,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                 ],
               ),
 
-        // BOTTONE INVIA FORMAZIONE
         bottomNavigationBar: SafeArea(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

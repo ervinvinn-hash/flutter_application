@@ -86,74 +86,88 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
       int updatedCount = 0;
 
       for (var fix in fixtures) {
-        int fixId = fix['fixture']['id'];
-        
-        final statsRes = await http.get(
-          Uri.parse('https://v3.football.api-sports.io/fixtures/players?fixture=$fixId'),
-          headers: {'x-apisports-key': apiKey},
-        );
-        
-        final statsData = json.decode(statsRes.body);
-        if (statsData['response'] == null || statsData['response'].isEmpty) continue;
-        
-        final List teamsStats = statsData['response'];
-
-        for (var team in teamsStats) {
-          final List playersList = team['players'];
+        // SPOSTATO IL TRY-CATCH QUI DENTRO
+        try {
+          int fixId = fix['fixture']['id'];
           
-          for (var p in playersList) {
-            final playerInfo = p['player'];
-            final stats = p['statistics'][0];
-            
-            String apiName = _normalizeName(playerInfo['name'].toString());
-            double rating = double.tryParse(stats['games']['rating']?.toString() ?? '6.0') ?? 6.0;
-            
-            int goals = stats['goals']['total'] ?? 0;
-            int assists = stats['goals']['assists'] ?? 0;
-            int yellows = stats['cards']['yellow'] ?? 0;
-            int reds = stats['cards']['red'] ?? 0;
-            int penMissed = stats['penalty']['missed'] ?? 0;
-            int penSaved = stats['penalty']['saved'] ?? 0;
-            
-            int minutesPlayed = stats['games']['minutes'] ?? 0;
-            int goalsConceded = stats['goals']['conceded'] ?? 0;
-            
-            bool matchTrovato = false;
+          // --- FIX RATE LIMITING ---
+          // Mettiamo in pausa l'app per 2 secondi tra una chiamata e l'altra per non farsi bloccare dall'API
+          await Future.delayed(const Duration(seconds: 2));
+          
+          final statsRes = await http.get(
+            Uri.parse('https://v3.football.api-sports.io/fixtures/players?fixture=$fixId'),
+            headers: {'x-apisports-key': apiKey},
+          );
+          
+          final statsData = json.decode(statsRes.body);
+          if (statsData['response'] == null || statsData['response'].isEmpty) continue;
+          
+          final List teamsStats = statsData['response'];
 
-            for (var myPlayer in playersToGrade) {
-              String myName = _normalizeName(myPlayer.name);
+          for (var team in teamsStats) {
+            final List playersList = team['players'];
+            
+            for (var p in playersList) {
+              final playerInfo = p['player'];
+              final stats = p['statistics'][0];
               
-              if (myName.contains(apiName) || apiName.contains(myName.split(' ').last)) {
-                matchTrovato = true;
-                print('✅ MATCH OK: API[$apiName] salvato su [$myName]');
+              String apiName = _normalizeName(playerInfo['name'].toString());
+              
+              // Arrotondamento ai mezzi punti (es. 6.3 -> 6.5)
+              double rawRating = double.tryParse(stats['games']['rating']?.toString() ?? '6.0') ?? 6.0;
+              double rating = (rawRating * 2).round() / 2.0;
+              
+              int goals = stats['goals']['total'] ?? 0;
+              int assists = stats['goals']['assists'] ?? 0;
+              int yellows = stats['cards']['yellow'] ?? 0;
+              int reds = stats['cards']['red'] ?? 0;
+              int penMissed = stats['penalty']['missed'] ?? 0;
+              int penSaved = stats['penalty']['saved'] ?? 0;
+              
+              int minutesPlayed = stats['games']['minutes'] ?? 0;
+              int goalsConceded = stats['goals']['conceded'] ?? 0;
+              
+              bool matchTrovato = false;
+
+              for (var myPlayer in playersToGrade) {
+                String myName = _normalizeName(myPlayer.name);
                 
-                setState(() {
-                  myPlayer.baseGrade = double.parse(rating.toStringAsFixed(1));
-                  myPlayer.goalsScored = goals;
-                  myPlayer.assists = assists;
-                  myPlayer.yellowCards = yellows;
-                  myPlayer.redCards = reds;
-                  myPlayer.penaltyMissed = penMissed;
-                  myPlayer.penaltySaved = penSaved;
-                  myPlayer.ownGoals = 0; 
-                  myPlayer.manOfTheMatch = false; 
-                  myPlayer.cleanSheet = (minutesPlayed > 0 && goalsConceded == 0 && (myPlayer.role == 'P' || myPlayer.role == 'D'));
-                });
-                
-                await _savePlayerStat(myPlayer);
-                updatedCount++;
-                break;
+                if (myName.contains(apiName) || apiName.contains(myName.split(' ').last)) {
+                  matchTrovato = true;
+                  print('✅ MATCH OK: API[$apiName] salvato su [$myName]');
+                  
+                  setState(() {
+                    myPlayer.baseGrade = rating; 
+                    myPlayer.goalsScored = goals;
+                    myPlayer.assists = assists;
+                    myPlayer.yellowCards = yellows;
+                    myPlayer.redCards = reds;
+                    myPlayer.penaltyMissed = penMissed;
+                    myPlayer.penaltySaved = penSaved;
+                    myPlayer.ownGoals = 0; 
+                    myPlayer.manOfTheMatch = false; 
+                    myPlayer.cleanSheet = (minutesPlayed > 0 && goalsConceded == 0 && (myPlayer.role == 'P'));
+                  });
+                  
+                  await _savePlayerStat(myPlayer);
+                  updatedCount++;
+                  break;
+                }
+              }
+              if (!matchTrovato && minutesPlayed > 0) {
+                print('❌ ATTENZIONE: L\'API ha inviato [$apiName] (${team['team']['name']}) ma non è presente nel tuo Database!');
               }
             }
-            if (!matchTrovato && minutesPlayed > 0) {
-               print('❌ PERSO: L\'API ha inviato [$apiName] ma non è nel database!');
-            }
           }
+        } catch (innerError) {
+          // Se una singola partita fallisce (es. timeout), la salta e passa alla prossima senza far crollare tutto
+          print('❌ ERRORE FETCH PARTITA: $innerError');
+          continue; 
         }
       }
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Magia completata! 🪄 Aggiornati $updatedCount giocatori.'), backgroundColor: Colors.green));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore Automazione: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore Generico Automazione: $e'), backgroundColor: Colors.red));
     } finally {
       setState(() => isFetchingApi = false);
     }
@@ -347,10 +361,44 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
         'clean_sheet': stat.cleanSheet,
         'penalty_saved': stat.penaltySaved,
         'penalty_missed': stat.penaltyMissed,
-      });
+      }, onConflict: 'match_day, player_id');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voto salvato per ${stat.name}'), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore salvataggio: $e'), backgroundColor: Colors.red));
+    }
+  }
+  
+  Future<void> _deletePlayerStat(PlayerStatInput stat) async {
+    try {
+      await Supabase.instance.client
+          .from('matchday_stats')
+          .delete()
+          .eq('match_day', selectedMatchDay)
+          .eq('player_id', stat.playerId);
+
+      setState(() {
+        stat.baseGrade = 6.0;
+        stat.goalsScored = 0;
+        stat.assists = 0;
+        stat.yellowCards = 0;
+        stat.redCards = 0;
+        stat.manOfTheMatch = false;
+        stat.ownGoals = 0;
+        stat.cleanSheet = false;
+        stat.penaltySaved = 0;
+        stat.penaltyMissed = 0;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Voto eliminato per ${stat.name}'),
+        backgroundColor: Colors.orange[800],
+        duration: const Duration(seconds: 1),
+      ));
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text('Errore eliminazione: $e'),
+        backgroundColor: Colors.red,
+      ));
     }
   }
 
@@ -478,16 +526,48 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                       ]
                     ],
 
+                    // ... sopra ci sono i vari contatori e switch ...
                     const SizedBox(height: 20),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800], foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16)),
-                      onPressed: () {
-                        _savePlayerStat(stat);
-                        setState(() {}); 
-                        Navigator.pop(ctx);
-                      },
-                      child: const Text('SALVA VOTI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                    Row(
+                      children: [
+                        // NUOVO BOTTONE AZZERA / ELIMINA VOTO
+                        Expanded(
+                          flex: 2,
+                          child: OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.grey[700],
+                              side: BorderSide(color: Colors.grey[400]!),
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                            ),
+                            onPressed: () {
+                              _deletePlayerStat(stat);
+                              Navigator.pop(ctx);
+                            },
+                            icon: const Icon(Icons.delete_outline),
+                            label: const Text('AZZERA', style: TextStyle(fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        // IL TUO BOTTONE SALVA ORIGINALE
+                        Expanded(
+                          flex: 3,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red[800], 
+                              foregroundColor: Colors.white, 
+                              padding: const EdgeInsets.symmetric(vertical: 16)
+                            ),
+                            onPressed: () {
+                              _savePlayerStat(stat);
+                              setState(() {}); 
+                              Navigator.pop(ctx);
+                            },
+                            child: const Text('SALVA VOTI', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          ),
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 20),
                     const SizedBox(height: 20),
                   ],
                 ),
