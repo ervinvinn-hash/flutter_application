@@ -20,6 +20,8 @@ class PlayerStatInput {
   bool cleanSheet;
   int penaltySaved;
   int penaltyMissed;
+  int goalsConceded;
+  double coachMultiplier;
 
   PlayerStatInput({
     required this.playerId,
@@ -36,6 +38,8 @@ class PlayerStatInput {
     this.cleanSheet = false,
     this.penaltySaved = 0,
     this.penaltyMissed = 0,
+    this.goalsConceded = 0,
+    this.coachMultiplier = 0.0,
   });
 }
 
@@ -147,6 +151,7 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                     myPlayer.ownGoals = 0; 
                     myPlayer.manOfTheMatch = false; 
                     myPlayer.cleanSheet = (minutesPlayed > 0 && goalsConceded == 0 && (myPlayer.role == 'P'));
+                    myPlayer.goalsConceded = goalsConceded;
                   });
                   
                   await _savePlayerStat(myPlayer);
@@ -309,7 +314,13 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
             cleanSheet: stat != null ? stat['clean_sheet'] : false,
             penaltySaved: stat != null ? stat['penalty_saved'] : 0,
             penaltyMissed: stat != null ? stat['penalty_missed'] : 0,
+            goalsConceded: stat != null ? stat['goals_conceded'] : 0,
+            coachMultiplier: stat != null ? (stat['coach_multiplier'] as num?)?.toDouble() ?? 0.0 : 0.0,
           ));
+          // Forza il voto base a 0 se è un CT
+          if (p['role'] == 'CT') {
+            loadedPlayers.last.baseGrade = 0.0;
+          }
         }
       }
 
@@ -361,6 +372,8 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
         'clean_sheet': stat.cleanSheet,
         'penalty_saved': stat.penaltySaved,
         'penalty_missed': stat.penaltyMissed,
+        'goals_conceded': stat.goalsConceded,
+        'coach_multiplier': stat.role == 'CT' ? stat.coachMultiplier : 0.0,
       }, onConflict: 'match_day, player_id');
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Voto salvato per ${stat.name}'), backgroundColor: Colors.green, duration: const Duration(seconds: 1)));
     } catch (e) {
@@ -387,6 +400,8 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
         stat.cleanSheet = false;
         stat.penaltySaved = 0;
         stat.penaltyMissed = 0;
+        stat.goalsConceded = 0;
+        stat.coachMultiplier = 0.0;
       });
 
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -413,24 +428,30 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
     }
   }
 
-  String getCountryWithFlag(String country) {
-    final String cleanCountry = country.trim(); 
+  String _getFlagOnly(String country) {
+    if (country.isEmpty || country == '???') return '🏳️';
+    final String cleanCountry = country.trim().toLowerCase().replaceAll('’', '\'').replaceAll('`', '\''); 
+
+    if (cleanCountry.contains('usa') || cleanCountry.contains('stati uniti')) return '🇺🇸';
+    if (cleanCountry.contains('avorio')) return '🇨🇮';
+
     final Map<String, String> flags = {
-      'Algeria': '🇩🇿', 'Arabia Saudita': '🇸🇦', 'Argentina': '🇦🇷', 'Australia': '🇦🇺',
-      'Austria': '🇦🇹', 'Belgio': '🇧🇪', 'Bosnia e Herzegovina': '🇧🇦', 'Brasile': '🇧🇷',
-      'Canada': '🇨🇦', 'Capo Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Congo': '🇨🇩', 
-      'Congo DR': '🇨🇩', 'Corea': '🇰🇷', 'Costa d\'avorio': '🇨🇮', 'Croazia': '🇭🇷',
-      'Curacao': '🇨🇼', 'Curaçao': '🇨🇼', 'Ecuador': '🇪🇨', 'Egitto': '🇪🇬',
-      'Francia': '🇫🇷', 'Germania': '🇩🇪', 'Ghana': '🇬🇭', 'Giappone': '🇯🇵',
-      'Giordania': '🇯🇴', 'Haiti': '🇭🇹', 'Inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 'Iran': '🇮🇷',
-      'Iraq': '🇮🇶', 'Italia': '🇮🇹', 'Marocco': '🇲🇦', 'Morocco': '🇲🇦',
-      'Messico': '🇲🇽', 'Norvegia': '🇳🇴', 'Nuova Zelanda': '🇳🇿', 'Olanda': '🇳🇱',
-      'Paesi Bassi': '🇳🇱', 'Panama': '🇵🇦', 'Paraguay': '🇵🇾', 'Portogallo': '🇵🇹',
-      'Qatar': '🇶🇦', 'Repubblica Ceca': '🇨🇿', 'Scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'Senegal': '🇸🇳',
-      'Spagna': '🇪🇸', 'Sud Africa': '🇿🇦', 'Svezia': '🇸🇪', 'Svizzera': '🇨🇭',
-      'Tunisia': '🇹🇳', 'Turchia': '🇹🇷', 'Uruguay': '🇺🇾', 'USA': '🇺🇸', 'Uzbekistan': '🇺🇿',
+      'algeria': '🇩🇿', 'arabia saudita': '🇸🇦', 'argentina': '🇦🇷', 'australia': '🇦🇺',
+      'austria': '🇦🇹', 'belgio': '🇧🇪', 'bosnia e herzegovina': '🇧🇦', 'bosnia': '🇧🇦',
+      'brasile': '🇧🇷', 'canada': '🇨🇦', 'capo verde': '🇨🇻', 'colombia': '🇨🇴', 
+      'congo': '🇨🇩', 'congo dr': '🇨🇩', 'corea': '🇰🇷', 'corea del sud': '🇰🇷', 
+      'croazia': '🇭🇷', 'curacao': '🇨🇼', 'curaçao': '🇨🇼', 'ecuador': '🇪🇨', 
+      'egitto': '🇪🇬', 'francia': '🇫🇷', 'germania': '🇩🇪', 'ghana': '🇬🇭', 
+      'giappone': '🇯🇵', 'giordania': '🇯🇴', 'haiti': '🇭🇹', 'inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', 
+      'iran': '🇮🇷', 'iraq': '🇮🇶', 'italia': '🇮🇹', 'marocco': '🇲🇦', 'morocco': '🇲🇦', 
+      'messico': '🇲🇽', 'norvegia': '🇳🇴', 'nuova zelanda': '🇳🇿', 'olanda': '🇳🇱', 
+      'paesi bassi': '🇳🇱', 'panama': '🇵🇦', 'paraguay': '🇵🇾', 'portogallo': '🇵🇹', 
+      'qatar': '🇶🇦', 'repubblica ceca': '🇨🇿', 'scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'senegal': '🇸🇳', 
+      'spagna': '🇪🇸', 'sud africa': '🇿🇦', 'svezia': '🇸🇪', 'svizzera': '🇨🇭', 
+      'tunisia': '🇹🇳', 'turchia': '🇹🇷', 'uruguay': '🇺🇾', 'uzbekistan': '🇺🇿',
     };
-    return '$cleanCountry ${flags[cleanCountry] ?? '🏳️'}';
+
+    return flags[cleanCountry] ?? '🏳️';
   }
 
   void _openGradingSheet(PlayerStatInput stat) {
@@ -477,7 +498,7 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(stat.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
-                              Text(getCountryWithFlag(stat.team), style: const TextStyle(color: Colors.grey)), 
+                              Text('${stat.team} ${_getFlagOnly(stat.team)}', style: const TextStyle(color: Colors.grey)), 
                             ],
                           ),
                         ),
@@ -485,20 +506,40 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                     ),
                     const Divider(height: 30, thickness: 2),
 
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text('VOTO BASE:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-                        Row(
-                          children: [
-                            IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red, size: 32), onPressed: () => setModalState(() => stat.baseGrade -= 0.5)),
-                            SizedBox(width: 50, child: Text(stat.baseGrade.toStringAsFixed(1), textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
-                            IconButton(icon: const Icon(Icons.add_circle, color: Colors.green, size: 32), onPressed: () => setModalState(() => stat.baseGrade += 0.5)),
-                          ],
-                        )
-                      ],
-                    ),
-                    const Divider(),
+                    // --- INCOLLA QUESTO NUOVO BLOCCO ---
+                    if (stat.role == 'CT') ...[
+                      // Mostra il Bonus se è un Allenatore
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('BONUS ALLENATORE:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Row(
+                            children: [
+                              IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red, size: 32), onPressed: () => setModalState(() => stat.coachMultiplier -= 0.5)),
+                              SizedBox(width: 60, child: Text(stat.coachMultiplier > 0 ? '+${stat.coachMultiplier}' : stat.coachMultiplier.toString(), textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+                              IconButton(icon: const Icon(Icons.add_circle, color: Colors.green, size: 32), onPressed: () => setModalState(() => stat.coachMultiplier += 0.5)),
+                            ],
+                          )
+                        ],
+                      ),
+                      const Divider(),
+                    ] else ...[
+                      // Mostra il Voto Base per tutti gli altri giocatori
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('VOTO BASE:', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                          Row(
+                            children: [
+                              IconButton(icon: const Icon(Icons.remove_circle, color: Colors.red, size: 32), onPressed: () => setModalState(() => stat.baseGrade -= 0.5)),
+                              SizedBox(width: 60, child: Text(stat.baseGrade.toStringAsFixed(1), textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold))),
+                              IconButton(icon: const Icon(Icons.add_circle, color: Colors.green, size: 32), onPressed: () => setModalState(() => stat.baseGrade += 0.5)),
+                            ],
+                          )
+                        ],
+                      ),
+                      const Divider(),
+                    ],
 
                     if (stat.role != 'CT') ...[
                       buildCounterRow('Gol Fatti ⚽', stat.goalsScored, (v) => setModalState(() => stat.goalsScored = v)),
@@ -516,6 +557,7 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                       if (stat.role == 'P') ...[
                         const Divider(),
                         const Text('Statistiche Portiere', style: TextStyle(color: Colors.orange, fontWeight: FontWeight.bold)),
+                        buildCounterRow('Gol Subiti 🥅', stat.goalsConceded, (v) => setModalState(() => stat.goalsConceded = v)),
                         buildCounterRow('Rigori Parati 🧤', stat.penaltySaved, (v) => setModalState(() => stat.penaltySaved = v)),
                         SwitchListTile(
                           title: const Text('Rete Inviolata 🛡️'),
@@ -722,14 +764,19 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(getCountryWithFlag(stat.team), style: const TextStyle(fontSize: 12)), 
+                                Text('${stat.team} ${_getFlagOnly(stat.team)}', style: const TextStyle(fontSize: 12)), 
                                 if (badges.isNotEmpty) Row(children: badges),
                               ],
                             ),
                             trailing: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                               decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
-                              child: Text(stat.baseGrade.toStringAsFixed(1), style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                              child: Text(
+                                stat.role == 'CT' 
+                                  ? (stat.coachMultiplier > 0 ? '+${stat.coachMultiplier}' : stat.coachMultiplier.toString())
+                                  : stat.baseGrade.toStringAsFixed(1), 
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)
+                              ),
                             ),
                             onTap: () => _openGradingSheet(stat),
                           ),

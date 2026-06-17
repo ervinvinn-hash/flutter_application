@@ -317,7 +317,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
 
   Future<double> _getTeamScore(String teamId, Map<int, Map<String, dynamic>> stats, Map<int, String> roles, CalculatorService calc) async {
     final rosterData = await Supabase.instance.client.from('roster_players')
-        .select('player_id, is_starter, is_bench, is_captain')
+        .select('player_id, is_starter, is_bench, is_captain, bench_order')
         .eq('team_id', teamId);
 
     List<PlayerStat> roster = [];
@@ -346,11 +346,13 @@ class _CalendarScreenState extends State<CalendarScreen> {
         yellowCards: s != null ? s['yellow_cards'] as int : 0,
         redCards: s != null ? s['red_cards'] as int : 0,
         manOfTheMatch: s != null ? s['man_of_the_match'] as bool : false,
-        coachMultiplier: s != null ? (s['coach_multiplier'] as num).toDouble() : 0.0,
+        coachMultiplier: s != null ? (s['coach_multiplier'] as num? ?? 0.0).toDouble() : 0.0,
         cleanSheet: s != null ? (s['clean_sheet'] == true) : false,
         penaltySaved: s != null ? (s['penalty_saved'] as int? ?? 0) : 0,
         penaltyMissed: s != null ? (s['penalty_missed'] as int? ?? 0) : 0,
         ownGoals: s != null ? (s['own_goals'] as int? ?? 0) : 0, 
+        goalsConceded: s != null ? (s['goals_conceded'] as int? ?? 0) : 0,
+        benchOrder: row['bench_order'] ?? 99,
       );
 
       if (role == 'CT') {

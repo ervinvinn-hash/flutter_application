@@ -16,13 +16,15 @@ class PlayerStat {
   final int penaltySaved;
   final int penaltyMissed;
   final int ownGoals; 
+  final int goalsConceded;
+  final int benchOrder;
 
   PlayerStat({
     required this.id, required this.role, required this.isStarter, required this.isBench,
     required this.baseGrade, required this.goalsScored, required this.assists,
     required this.yellowCards, required this.redCards, required this.manOfTheMatch,
     required this.coachMultiplier, required this.cleanSheet,
-    required this.penaltySaved, required this.penaltyMissed, required this.ownGoals
+    required this.penaltySaved, required this.penaltyMissed, required this.ownGoals, required this.goalsConceded, required this.benchOrder,
   });
 }
 
@@ -42,6 +44,7 @@ class CalculatorService {
       'pen_saved': (data['penalty_saved_bonus'] as num?)?.toDouble() ?? 3.0,
       'pen_missed': (data['penalty_missed_malus'] as num?)?.toDouble() ?? -3.0,
       'own_goal': (data['own_goal_malus'] as num?)?.toDouble() ?? -1.0,
+      'goal_conceded': (data['goals_conceded_malus'] as num?)?.toDouble() ?? -1.0,
       'bench_goal': (data['bench_goal_bonus'] as num?)?.toDouble() ?? 1.0,
       'bench_pen': (data['bench_penalty_saved_bonus'] as num?)?.toDouble() ?? 1.0,
     };
@@ -58,7 +61,9 @@ class CalculatorService {
     List<PlayerStat> missingStarters = roster.where((p) => p.isStarter && p.baseGrade == 0).toList();
     // Panchinari che hanno preso voto
     List<PlayerStat> availableBench = roster.where((p) => p.isBench && p.baseGrade > 0).toList();
-    
+    // Ordina i panchinari seguendo fedelmente la gerarchia decisa dall'utente
+    availableBench.sort((a, b) => a.benchOrder.compareTo(b.benchOrder));
+
     int subsMade = 0;
 
     // Procediamo ai cambi (Massimo 3)
@@ -89,6 +94,9 @@ class CalculatorService {
         pScore += (p.ownGoals * settings['own_goal']!); 
         pScore += (p.penaltySaved * settings['pen_saved']!);
         pScore += (p.penaltyMissed * settings['pen_missed']!);
+        if (p.role == 'P') {
+          pScore += (p.goalsConceded * settings['goal_conceded']!);
+        }
         
         // Bonus Speciali
         if (p.manOfTheMatch) pScore += settings['motm']!;

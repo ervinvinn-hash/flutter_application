@@ -248,38 +248,93 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   Future<void> _saveLineup({bool forceSave = false}) async {
-    _syncRosterState();
-    int starters = roster.where((p) => p['is_starter'] && p['role'] != 'CT').length;
-    bool hasCaptain = roster.any((p) => p['is_starter'] && p['is_captain'] == true && p['role'] != 'CT');
+    _syncRosterState(); //
+    int starters = roster.where((p) => p['is_starter'] && p['role'] != 'CT').length; //
+    bool hasCaptain = roster.any((p) => p['is_starter'] && p['is_captain'] == true && p['role'] != 'CT'); //
 
-    if (!forceSave) {
-      if (starters != 11) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Devi riempire gli 11 slot sul campo! (Ora: $starters)'), backgroundColor: Colors.orange[800]));
-        return;
+    if (!forceSave) { //
+      if (starters != 11) { //
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Devi riempire gli 11 slot sul campo! (Ora: $starters)'), backgroundColor: Colors.orange[800])); //
+        return; //
       }
-      if (!hasCaptain) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Manca il Capitano! Tieni premuto su un giocatore per assegnarlo.'), backgroundColor: Colors.orange[800]));
-        return;
+      if (!hasCaptain) { //
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Manca il Capitano! Tieni premuto su un giocatore per assegnarlo.'), backgroundColor: Colors.orange[800])); //
+        return; //
       }
     }
 
-    setState(() => isSaving = true);
+    setState(() => isSaving = true); //
+    
     try {
       final client = Supabase.instance.client;
+
+      // --- 1. CONTROLLO ANTI-FURBETTI (ORARIO SERVER) ---
+      // Recuperiamo l'ora esatta attuale direttamente dal server PostgreSQL di Supabase
+      // Per massima precisione chiediamo il timestamp al database
+      final serverTimeData = await client.rpc('get_server_time').catchError((_) => null);
+      
+      // Fallback sicuro se la funzione RPC non è ancora creata: prendiamo il tempo della macchina
+      DateTime serverNow = DateTime.now();
+      if (serverTimeData != null) {
+        serverNow = DateTime.parse(serverTimeData.toString()).toLocal();
+      }
+
+      // Recuperiamo tutte le partite per capire qual è la prima in assoluto della giornata corrente
+      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true); //
+      
+      int currentMatchday = 1; //
+      // Troviamo la giornata attuale basandoci sulla prima partita ancora da giocare
+      try {
+        var upcomingMatch = matchesData.firstWhere((m) {
+          DateTime kickoff = DateTime.parse(m['kickoff_time']); //
+          return kickoff.add(const Duration(hours: 2)).isAfter(serverNow);
+        });
+        currentMatchday = upcomingMatch['matchday']; //
+      } catch (e) {
+        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday']; //
+      }
+
+      // Trova la primissima partita in assoluto di QUESTA specifica giornata
+      final firstMatchOfRound = matchesData.firstWhere((m) => m['matchday'] == currentMatchday);
+      DateTime deadline = DateTime.parse(firstMatchOfRound['kickoff_time']).toLocal();
+
+      // SE L'ORA DEL SERVER HA SUPERATO IL FISCHIO D'INIZIO DELLA PRIMA PARTITA -> BLOCCO TOTALE
+      if (serverNow.isAfter(deadline)) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(
+            '❌ INVIO BLOCCATO! La $currentMatchdayª Giornata è già iniziata il ${deadline.day}/${deadline.month} alle ${deadline.hour}:${deadline.minute.toString().padLeft(2, '0')}.',
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.red[900],
+          duration: const Duration(seconds: 5),
+        ));
+        setState(() => isSaving = false);
+        return; // Interrompe la funzione, impedendo il salvataggio su Supabase!
+      }
+      // ---------------------------------------------------
+
+      // --- 2. SALVATAGGIO SE TUTTO È IN REGOLA ---
       for (var p in roster) {
+        int bOrder = 99;
+        if (p['is_bench'] == true) {
+          // Trova la posizione esatta in panchina (es. da 1 a 7)
+          bOrder = benchPlayers.indexWhere((bp) => bp != null && bp['player_id'] == p['player_id']) + 1;
+        }
+
         await client.from('roster_players').update({
           'is_starter': p['is_starter'],
           'is_bench': p['is_bench'],
           'is_captain': p['is_captain'] ?? false,
+          'bench_order': bOrder, // <--- SALVIAMO LA GERARCHIA!
         }).eq('team_id', widget.teamId).eq('player_id', p['player_id']);
       }
       
-      String msg = forceSave ? 'Bozza salvata con successo! 📝' : 'Formazione inviata! 🚀';
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green));
+      String msg = forceSave ? 'Bozza salvata con successo! 📝' : 'Formazione inviata! 🚀'; //
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green)); //
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red)); //
     } finally {
-      setState(() => isSaving = false);
+      setState(() => isSaving = false); //
     }
   }
 
