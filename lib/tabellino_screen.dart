@@ -28,7 +28,10 @@ class TabellinoScreen extends StatefulWidget {
 class _TabellinoScreenState extends State<TabellinoScreen> {
   bool isLoading = true;
   
+<<<<<<< HEAD
   // Contenitori per gli allenatori (destrutturati dai titolari standard)
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
   Map<String, dynamic>? t1Coach;
   Map<String, dynamic>? t2Coach;
 
@@ -47,14 +50,20 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
 
   Future<void> _fetchTabellinoData() async {
     try {
+<<<<<<< HEAD
       // 1. Prendi tutti i giocatori e i voti della giornata
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
       final playersData = await Supabase.instance.client.from('players').select('id, name, role, national_team'); //
       final statsData = await Supabase.instance.client.from('matchday_stats').select().eq('match_day', widget.matchDay); //
       
       Map<int, Map<String, dynamic>> pMap = { for (var p in playersData) p['id']: p }; //
       playerStats = { for (var s in statsData) s['player_id']: s }; //
 
+<<<<<<< HEAD
       // 2. Prendi i roster delle due squadre
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
       final roster1 = await Supabase.instance.client.from('roster_players').select().eq('team_id', widget.team1Id); //
       final roster2 = await Supabase.instance.client.from('roster_players').select().eq('team_id', widget.team2Id); //
 
@@ -71,6 +80,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
               'is_starter': row['is_starter'] ?? false, //
               'is_bench': row['is_bench'] ?? false, //
               'is_captain': row['is_captain'] ?? false, //
+<<<<<<< HEAD
               'bench_order': row['bench_order'] ?? 99, //
             });
           }
@@ -84,6 +94,13 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
           return (a['bench_order'] as int).compareTo(b['bench_order'] as int); //
         });
         
+=======
+            });
+          }
+        }
+        final roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5}; //
+        list.sort((a, b) => roleOrder[a['role']]!.compareTo(roleOrder[b['role']] ?? 99)); //
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
         return list; //
       }
 
@@ -91,11 +108,17 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
       var fullT2 = mapRoster(roster2); //
 
       setState(() {
+<<<<<<< HEAD
         // Estraiamo separatamente l'allenatore (se schierato)
         try { t1Coach = fullT1.firstWhere((p) => p['is_starter'] && p['role'] == 'CT'); } catch(_) { t1Coach = null; }
         try { t2Coach = fullT2.firstWhere((p) => p['is_starter'] && p['role'] == 'CT'); } catch(_) { t2Coach = null; }
 
         // I Titolari escludono il CT per non duplicarlo o inserirlo nel blocco giocatori
+=======
+        try { t1Coach = fullT1.firstWhere((p) => p['is_starter'] && p['role'] == 'CT'); } catch(_) { t1Coach = null; } //
+        try { t2Coach = fullT2.firstWhere((p) => p['is_starter'] && p['role'] == 'CT'); } catch(_) { t2Coach = null; } //
+
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
         t1Starters = fullT1.where((p) => p['is_starter'] && p['role'] != 'CT').toList(); //
         t1Bench = fullT1.where((p) => p['is_bench'] && p['role'] != 'CT').toList(); //
         
@@ -110,9 +133,15 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     }
   }
 
-  // Mappa Bandiere
-  String _getFlagOnly(String country) {
+  String _getFlagOnly(String country) { //
+    if (country.isEmpty || country == '???') return '🏳️'; //
+    final String cleanCountry = country.trim().toLowerCase().replaceAll('’', '\'').replaceAll('`', '\''); //
+
+    if (cleanCountry.contains('usa') || cleanCountry.contains('stati uniti')) return '🇺🇸'; //
+    if (cleanCountry.contains('avorio')) return '🇨🇮'; //
+
     final Map<String, String> flags = {
+<<<<<<< HEAD
       'Algeria': '🇩🇿', 'Arabia Saudita': '🇸🇦', 'Argentina': '🇦🇷', 'Australia': '🇦🇺', //
       'Austria': '🇦🇹', 'Belgio': '🇧🇪', 'Bosnia e Herzegovina': '🇧🇦', 'Brasile': '🇧🇷', //
       'Canada': '🇨🇦', 'Capo Verde': '🇨🇻', 'Colombia': '🇨🇴', 'Congo': '🇨🇩', //
@@ -129,6 +158,23 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
       'Uzbekistan': '🇺🇿', //
     };
     return flags[country.trim()] ?? '🏳️'; //
+=======
+      'algeria': '🇩🇿', 'arabia saudita': '🇸🇦', 'argentina': '🇦🇷', 'australia': '🇦🇺', //
+      'austria': '🇦🇹', 'belgio': '🇧🇪', 'bosnia e herzegovina': '🇧🇦', 'bosnia': '🇧🇦', //
+      'brasile': '🇧🇷', 'canada': '🇨🇦', 'capo verde': '🇨🇻', 'colombia': '🇨🇴', //
+      'congo': '🇨🇩', 'congo dr': '🇨🇩', 'corea': '🇰🇷', 'corea del sud': '🇰🇷', //
+      'croazia': '🇭🇷', 'curacao': '🇨🇼', 'curaçao': '🇨🇼', 'ecuador': '🇪🇨', //
+      'egitto': '🇪🇬', 'francia': '🇫🇷', 'germania': '🇩🇪', 'ghana': '🇬🇭', //
+      'giappone': '🇯🇵', 'giordania': '🇯🇴', 'haiti': '🇭🇹', 'inghilterra': '🏴󠁧󠁢󠁥󠁮󠁧󠁿', //
+      'iran': '🇮🇷', 'iraq': '🇮🇶', 'italia': '🇮🇹', 'marocco': '🇲🇦', 'morocco': '🇲🇦', //
+      'messico': '🇲🇽', 'norvegia': '🇳🇴', 'nuova zelanda': '🇳🇿', 'olanda': '🇳🇱', //
+      'paesi bassi': '🇳🇱', 'panama': '🇵🇦', 'paraguay': '🇵🇾', 'portogallo': '🇵🇹', //
+      'qatar': '🇶🇦', 'repubblica ceca': '🇨🇿', 'scozia': '🏴󠁧󠁢󠁳󠁣󠁴󠁿', 'senegal': '🇸🇳', //
+      'spagna': '🇪🇸', 'sud africa': '🇿🇦', 'svezia': '🇸🇪', 'svizzera': '🇨🇭', //
+      'tunisia': '🇹🇳', 'turchia': '🇹🇷', 'uruguay': '🇺🇾', 'uzbekistan': '🇺🇿', //
+    };
+    return flags[cleanCountry] ?? '🏳️'; //
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
   }
 
   Color _getRoleColor(String role) { //
@@ -142,26 +188,43 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     }
   }
 
+<<<<<<< HEAD
   // --- CALCOLO FANTAVOTO E EMOJI ---
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
   Map<String, dynamic> _calculatePlayerPerformance(int playerId, String role) { //
     if (!playerStats.containsKey(playerId)) { //
       return {'voto': '-', 'fantavoto': '-', 'emojis': ''}; //
     }
     
     var s = playerStats[playerId]!; //
+<<<<<<< HEAD
     
     if (role == 'CT') { //
       double coachMod = (s['coach_multiplier'] as num? ?? 0.0).toDouble(); //
       return {
         'voto': '-', //
         'fantavoto': coachMod > 0 ? '+${coachMod.toStringAsFixed(1)}' : coachMod.toStringAsFixed(1), //
+=======
+    double base = (s['base_grade'] as num).toDouble(); //
+    if (base == 0) return {'voto': 's.v.', 'fantavoto': '-', 'emojis': ''}; //
+
+    if (role == 'CT') { //
+      double coachMod = (s['coach_multiplier'] as num? ?? 0.0).toDouble(); //
+      return {
+        'voto': base.toStringAsFixed(1), //
+        'fantavoto': coachMod >= 0 ? '+$coachMod' : '$coachMod', //
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
         'emojis': '👔', //
       };
     }
 
+<<<<<<< HEAD
     double base = (s['base_grade'] as num).toDouble(); //
     if (base == 0) return {'voto': 's.v.', 'fantavoto': '-', 'emojis': ''}; //
 
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
     int gol = s['goals_scored'] ?? 0; //
     int assist = s['assists'] ?? 0; //
     int yellow = s['yellow_cards'] ?? 0; //
@@ -169,15 +232,23 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     int own = s['own_goals'] ?? 0; //
     int pMissed = s['penalty_missed'] ?? 0; //
     int pSaved = s['penalty_saved'] ?? 0; //
+<<<<<<< HEAD
     int goalsConceded = s['goals_conceded'] ?? 0; //
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
     bool clean = s['clean_sheet'] ?? false; //
 
     double fv = base + (gol * 3) + (assist * 1) - (yellow * 0.5) - (red * 1) - (own * 2) - (pMissed * 3); //
     if (role == 'P') { //
       fv += (pSaved * 3); //
+<<<<<<< HEAD
       fv -= (goalsConceded * 1.0); //
       if (clean) fv += 1; //
     }
+=======
+      if (clean) fv += 1; //
+    } //
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
 
     String emojis = ''; //
     if (gol > 0) emojis += '⚽' * gol; //
@@ -186,7 +257,10 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     if (red > 0) emojis += '🟥'; //
     if (own > 0) emojis += '🤦‍♂️' * own; //
     if (pMissed > 0) emojis += '❌' * pMissed; //
+<<<<<<< HEAD
     if (goalsConceded > 0 && role == 'P') emojis += '🥅' * goalsConceded; //
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
     if (pSaved > 0) emojis += '🧤' * pSaved; //
     if (clean && role == 'P') emojis += '🛡️'; //
 
@@ -197,6 +271,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     };
   }
 
+<<<<<<< HEAD
   // --- BOLLINO GIALLO DEL CAPITANO C ---
   Widget _buildCaptainBadge() {
     return Container(
@@ -206,11 +281,30 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
       decoration: const BoxDecoration(
         color: Colors.amber, //
         shape: BoxShape.circle, //
+=======
+  // --- IL BOLLINO GIALLO CON LA C NERA ---
+  Widget _buildCaptainBadge() {
+    return Container(
+      width: 16,
+      height: 16,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: const BoxDecoration(
+        color: Colors.amber, // Giallo fascia
+        shape: BoxShape.circle,
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
       ),
       child: const Center(
         child: Text(
           'C',
+<<<<<<< HEAD
           style: TextStyle(color: Colors.black, fontSize: 9, fontWeight: FontWeight.bold), //
+=======
+          style: TextStyle(
+            color: Colors.black, // C Nera
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+          ),
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
         ),
       ),
     );
@@ -220,6 +314,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
   Widget _buildPlayerSide(Map<String, dynamic>? player, bool isLeft) {
     if (player == null) return const Expanded(child: SizedBox.shrink()); //
 
+<<<<<<< HEAD
     // Prepariamo i componenti grafici dentro la lista "content"
     List<Widget> content = [
       CircleAvatar(
@@ -227,12 +322,22 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
         backgroundColor: _getRoleColor(player['role']), 
         child: Text(player['role'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))
       ), //
+=======
+    List<Widget> content = [
+      CircleAvatar(radius: 12, backgroundColor: _getRoleColor(player['role']), child: Text(player['role'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))), //
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
       const SizedBox(width: 8), //
       Expanded(
         child: Column(
           crossAxisAlignment: isLeft ? CrossAxisAlignment.start : CrossAxisAlignment.end, //
+<<<<<<< HEAD
           mainAxisAlignment: MainAxisAlignment.center, // Allineamento verticale corretto!
           children: [
+=======
+          mainAxisAlignment: MainAxisAlignment.center, //
+          children: [
+            // IL NOME ORA TORNA PULITO SENZA COMPOSIZIONI STRANE
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
             Text(player['name'], style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.black87), overflow: TextOverflow.ellipsis), //
             Text('${player['national_team']} ${_getFlagOnly(player['national_team'])}', style: const TextStyle(fontSize: 10, color: Colors.black54)), //
           ],
@@ -245,17 +350,27 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
         padding: const EdgeInsets.symmetric(horizontal: 4), //
         child: Row(
           mainAxisAlignment: isLeft ? MainAxisAlignment.start : MainAxisAlignment.end, //
+<<<<<<< HEAD
           // Qui USIAMO la variabile content (se è il giocatore di destra invertiamo l'ordine della riga)
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
           children: isLeft ? content : content.reversed.toList(), //
         ),
       ),
     );
   }
 
+<<<<<<< HEAD
   // --- WIDGET BLOCCO CENTRALE VOTI CON CAPITANO E BADGE ---
   Widget _buildCenterGrades(Map<String, dynamic>? p1, Map<String, dynamic>? p2) {
     var perf1 = p1 != null ? _calculatePlayerPerformance(p1['player_id'], p1['role']) : {'voto': '-', 'fantavoto': '-', 'emojis': ''}; //
     var perf2 = p2 != null ? _calculatePlayerPerformance(p2['player_id'], p2['role']) : {'voto': '-', 'fantavoto': '-', 'emojis': ''}; //
+=======
+  // --- WIDGET BLOCCO CENTRALE VOTI (CON I BADGE CAPITANO E BONUS AFFIANCATI) ---
+  Widget _buildCenterGrades(Map<String, dynamic>? p1, Map<String, dynamic>? p2) {
+    var perf1 = p1 != null ? _calculatePlayerPerformance(p1['player_id'], p1['role']) : {'voto': '-', 'fantavoto': '-', 'emojis': ''};
+    var perf2 = p2 != null ? _calculatePlayerPerformance(p2['player_id'], p2['role']) : {'voto': '-', 'fantavoto': '-', 'emojis': ''};
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
 
     bool isCaptain1 = p1 != null && (p1['is_captain'] ?? false);
     bool isCaptain2 = p2 != null && (p2['is_captain'] ?? false);
@@ -279,7 +394,11 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
             ),
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 4), //
+<<<<<<< HEAD
               child: Text(fv, textAlign: TextAlign.center, style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.orange[900])), //
+=======
+              child: Text(fv, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.orange[900])), //
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
             ),
           ],
         ),
@@ -289,6 +408,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min, //
       children: [
+<<<<<<< HEAD
         if (isCaptain1) _buildCaptainBadge(), //
         if (perf1['emojis'] != '') Padding(padding: const EdgeInsets.only(right: 4), child: Text(perf1['emojis'], style: const TextStyle(fontSize: 11))), //
 
@@ -297,6 +417,21 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
 
         if (perf2['emojis'] != '') Padding(padding: const EdgeInsets.only(left: 4), child: Text(perf2['emojis'], style: const TextStyle(fontSize: 11))), //
         if (isCaptain2) _buildCaptainBadge(), //
+=======
+        // --- SEZIONE SINISTRA (SQUADRA 1) ---
+        // Se è capitano, posiziona il bollino giallo prima dei badge emoji (quindi a sinistra dei voti)
+        if (isCaptain1) _buildCaptainBadge(),
+        if (perf1['emojis'] != '') Text(perf1['emojis'], style: const TextStyle(fontSize: 11)),
+        
+        // I DUE VOTI AL CENTRO RIGIDI
+        gradeBox(perf1['voto'], perf1['fantavoto'], true), //
+        gradeBox(perf2['voto'], perf2['fantavoto'], false), //
+        
+        // --- SEZIONE DESTRA (SQUADRA 2) ---
+        if (perf2['emojis'] != '') Text(perf2['emojis'], style: const TextStyle(fontSize: 11)),
+        // Se è capitano, posiziona il bollino subito dopo le emoji (quindi a destra dei voti)
+        if (isCaptain2) _buildCaptainBadge(),
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
       ],
     );
   }
@@ -314,7 +449,11 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
       child: Row(
         children: [
           _buildPlayerSide(p1, true), //
+<<<<<<< HEAD
           _buildCenterGrades(p1, p2), //
+=======
+          _buildCenterGrades(p1, p2), // Gestisce voti, capitani ed emoji tutti allineati al centro
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
           _buildPlayerSide(p2, false), //
         ],
       ),
@@ -345,7 +484,6 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
             ? const Center(child: CircularProgressIndicator(color: Colors.orange)) //
             : Column(
                 children: [
-                  // --- HEADER RISULTATO SQUADRE ---
                   Container(
                     padding: const EdgeInsets.all(16), //
                     color: Colors.orange[900]?.withValues(alpha: 0.9), //
@@ -362,11 +500,15 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
                     ),
                   ),
 
+<<<<<<< HEAD
                   // --- LISTA INCRONCIATA CON BLOCCO ALLENATORI IN CIMA ---
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
                   Expanded(
                     child: ListView(
                       padding: const EdgeInsets.symmetric(vertical: 8), //
                       children: [
+<<<<<<< HEAD
                         // --- NUOVO: SEZIONE SEPARATA ALLENATORI IN ALTO ---
                         if (t1Coach != null || t2Coach != null) ...[
                           const Padding(
@@ -378,6 +520,17 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
                         ],
 
                         // Titolo Titolari
+=======
+                        if (t1Coach != null || t2Coach != null) ...[ //
+                          const Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8), //
+                            child: Center(child: Text('ALLENATORI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2))), //
+                          ),
+                          _buildMatchRow(t1Coach, t2Coach), //
+                          const SizedBox(height: 8), //
+                        ],
+
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
                         const Padding(
                           padding: EdgeInsets.symmetric(vertical: 8), //
                           child: Center(child: Text('TITOLARI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2))), //
@@ -392,7 +545,10 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
                             i < t2Starters.length ? t2Starters[i] : null, //
                           ), //
 
+<<<<<<< HEAD
                         // Titolo Panchina
+=======
+>>>>>>> 280a1aca2c4c3bb43cf7b1a80bb051209d2b39e3
                         if (maxBench > 0) ...[ //
                           const Padding( //
                             padding: EdgeInsets.only(top: 16, bottom: 8), //
