@@ -848,12 +848,12 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.only(left: 16, right: 8, top: 12, bottom: 8),
+                          padding: const EdgeInsets.only(left: 16, right: 16, top: 12, bottom: 8),
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
+                              // 1. ZONA SINISTRA: Nome Squadra (Prende tutto lo spazio disponibile a sinistra)
                               Expanded(
-                                flex: 3,
                                 child: Row(
                                   children: [
                                     Icon(Icons.shield, color: Colors.orange[800], size: 24),
@@ -861,66 +861,74 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                     Expanded(
                                       child: Text(
                                         widget.teamName,
-                                        style: const TextStyle(color: Colors.black87, fontSize: 14, fontWeight: FontWeight.bold),
+                                        style: const TextStyle(color: Colors.black87, fontSize: 15, fontWeight: FontWeight.bold),
                                         overflow: TextOverflow.ellipsis,
                                       ),
                                     ),
                                   ],
                                 ),
                               ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 4),
-                                decoration: BoxDecoration(
-                                  gradient: LinearGradient(colors: [Colors.orange[700]!, Colors.orange[900]!]),
-                                  borderRadius: BorderRadius.circular(20),
-                                  boxShadow: [BoxShadow(color: Colors.orange.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 3))],
-                                ),
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    const Text('MODULO', style: TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1)),
-                                    DropdownButtonHideUnderline(
-                                      child: DropdownButton<String>(
-                                        value: currentFormation,
-                                        dropdownColor: Colors.orange[900],
-                                        icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                                        isDense: true,
-                                        style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-                                        onChanged: (String? newValue) {
-                                          if (newValue != null) _changeFormation(newValue);
-                                        },
-                                        items: validFormations.map<DropdownMenuItem<String>>((String value) {
-                                          return DropdownMenuItem<String>(value: value, child: Text(value));
-                                        }).toList(),
-                                      ),
+                              
+                              // 2. ZONA DESTRA: Il "Blocco Invisibile" con moduli e tasti compattati
+                              Row(
+                                mainAxisSize: MainAxisSize.min, // Questo è il trucco: occupa solo lo spazio stretto necessario
+                                children: [
+                                  // --- MODULO ---
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(colors: [Colors.orange[700]!, Colors.orange[900]!]),
+                                      borderRadius: BorderRadius.circular(20),
+                                      boxShadow: [BoxShadow(color: Colors.orange.withValues(alpha: 0.4), blurRadius: 6, offset: const Offset(0, 3))],
                                     ),
-                                  ],
-                                ),
-                              ),
-                              Expanded(
-                                flex: 2,
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.end,
-                                  children: [
-                                    if (!isLineupLocked)
-                                      IconButton(
-                                        icon: Icon(Icons.save, color: Colors.orange[800], size: 24),
-                                        tooltip: 'Salva bozza',
-                                        padding: EdgeInsets.zero,
-                                        constraints: const BoxConstraints(),
-                                        onPressed: () => _saveLineup(forceSave: true),
-                                      ),
-                                    const SizedBox(width: 8),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Text('MODULO', style: TextStyle(fontSize: 9, color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1)),
+                                        DropdownButtonHideUnderline(
+                                          child: DropdownButton<String>(
+                                            value: currentFormation,
+                                            dropdownColor: Colors.orange[900],
+                                            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
+                                            isDense: true,
+                                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                                            onChanged: (String? newValue) {
+                                              if (newValue != null) _changeFormation(newValue);
+                                            },
+                                            items: validFormations.map<DropdownMenuItem<String>>((String value) {
+                                              return DropdownMenuItem<String>(value: value, child: Text(value));
+                                            }).toList(),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  
+                                  // --- SPAZIO 10px ---
+                                  const SizedBox(width: 10),
+                                  
+                                  // --- TASTO SALVA ---
+                                  if (!isLineupLocked)
                                     IconButton(
-                                      icon: Icon(Icons.share, color: Colors.orange[800], size: 24),
-                                      tooltip: 'Copia formazione',
+                                      icon: Icon(Icons.save, color: Colors.orange[800], size: 26),
+                                      tooltip: 'Salva bozza',
                                       padding: EdgeInsets.zero,
                                       constraints: const BoxConstraints(),
-                                      onPressed: _copyLineupToClipboard,
-                                    ),
-                                    const SizedBox(width: 8),
-                                  ],
-                                ),
+                                      onPressed: () => _saveLineup(forceSave: true),
+                                    ),                                  
+                                  // (Se il tasto salva non c'è, mettiamo comunque lo spazio corretto per condividi)
+                                  if (!isLineupLocked) const SizedBox(width: 10),
+                                  if (isLineupLocked) const SizedBox(width: 6), // Piccolo compenso se è bloccato
+                                  
+                                  // --- TASTO CONDIVIDI ---
+                                  IconButton(
+                                    icon: Icon(Icons.share, color: Colors.orange[800], size: 26),
+                                    tooltip: 'Copia formazione',
+                                    padding: EdgeInsets.zero,
+                                    constraints: const BoxConstraints(),
+                                    onPressed: _copyLineupToClipboard,
+                                  ),
+                                ],
                               ),
                             ],
                           ),
