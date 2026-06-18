@@ -17,7 +17,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   bool isLoading = true;
   bool isSaving = false;
   
-  // --- VARIABILE PER IL BLOCCO FORMAZIONE ---
   bool isLineupLocked = false;
   
   List<Map<String, dynamic>> roster = [];
@@ -53,7 +52,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       final rosterData = await client.from('roster_players').select().eq('team_id', widget.teamId);
       final playersData = await client.from('players').select('id, name, role, national_team');
       
-      // --- IL NUOVO MOTORE DEL CALENDARIO ---
       final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true);
       
       int currentMatchday = 1;
@@ -69,18 +67,16 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
       }
 
-      // --- LOGICA DI BLOCCO/SBLOCCO AUTOMATICO ---
       final currentRoundMatches = matchesData.where((m) => m['matchday'] == currentMatchday).toList();
       if (currentRoundMatches.isNotEmpty) {
         List<DateTime> matchDates = currentRoundMatches
             .map((m) => DateTime.parse(m['kickoff_time']).toLocal())
             .toList();
-        matchDates.sort(); // Ordine cronologico
+        matchDates.sort(); 
         
         DateTime firstMatch = matchDates.first;
         DateTime lastMatch = matchDates.last;
         
-        // La finestra in cui è vietato modificare: da -15 min prima a +2h dopo
         DateTime lockTime = firstMatch.subtract(const Duration(minutes: 15));
         DateTime unlockTime = lastMatch.add(const Duration(hours: 2));
         
@@ -102,7 +98,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         }
       }
       
-      // --- RECUPERO E CALCOLO STATISTICHE REALI ---
       List<int> rosterIds = rosterData.map<int>((r) => r['player_id'] as int).toList();
       
       List<dynamic> statsData = [];
@@ -236,7 +231,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   void _changeFormation(String newFormation) {
-    if (isLineupLocked) return; // Disabilita cambio modulo se bloccato
+    if (isLineupLocked) return; 
     setState(() {
       currentFormation = newFormation;
       int reqD = int.parse(newFormation[0]);
@@ -285,7 +280,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     try {
       final client = Supabase.instance.client;
 
-      // 1. CONTROLLO ANTI-FURBETTI (ORARIO SERVER COME FALLBACK)
       final serverTimeData = await client.rpc('get_server_time').catchError((_) => null);
       DateTime serverNow = DateTime.now();
       if (serverTimeData != null) {
@@ -321,7 +315,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         return; 
       }
 
-      // 2. SALVATAGGIO IN ROSTER_PLAYERS
       for (var p in roster) {
         int bOrder = 99;
         if (p['is_bench'] == true) {
@@ -444,7 +437,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   void _showPlayerSelectionDialog(String role, Function(Map<String, dynamic>?) onSelected) {
-    if (isLineupLocked) return; // Disabilita apertura menu se bloccato
+    if (isLineupLocked) return; 
     List<Map<String, dynamic>> available = _getAvailablePlayers(role);
 
     showModalBottomSheet(
@@ -594,98 +587,133 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     );
   }
 
+  // --- LA NUOVA SEZIONE CAMPO SCROLLABILE ---
   Widget _buildTabCampo() {
     return Container(
       decoration: const BoxDecoration(
         image: DecorationImage(
           image: AssetImage('assets/foto_campo.png'),
-          fit: BoxFit.cover,
+          fit: BoxFit.cover, // Copre l'intero background in modo fisso
           alignment: Alignment.topCenter,
           colorFilter: ColorFilter.mode(Colors.black26, BlendMode.darken),
         ),
       ),
-      child: Column(
+      child: Stack(
         children: [
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 40.0, left: 40.0, right: 40.0, bottom: 0.0),
-                  child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
-                  child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 0.0, left: 20.0, right: 20.0, bottom: 0.0),
-                  child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
-                ),
-                Row(
-                  children: [
-                    Expanded(child: Container()),
-                    _buildSlot('P', fieldP, (p) => fieldP = p),
-                    Expanded(
-                      child: Align(
-                        alignment: Alignment.centerRight,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 40.0),
-                          child: _buildSlot('CT', fieldCoach, (p) => fieldCoach = p),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Container(
-            margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.92),
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))],
-            ),
-            child: Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                initiallyExpanded: false, 
-                iconColor: Colors.orange[800],
-                collapsedIconColor: Colors.black54,
-                title: const Row(
-                  children: [
-                    Icon(Icons.airline_seat_recline_normal, color: Colors.black54, size: 20),
-                    SizedBox(width: 8),
-                    Text('PANCHINA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54, letterSpacing: 0.5)),
-                  ],
-                ),
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+          // 1. IL CAMPO (Scrollabile per adattarsi a tutti gli schermi)
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // Imposta un'altezza minima (580) per mantenere intatte le proporzioni del campo
+                double minFieldHeight = constraints.maxHeight > 580 ? constraints.maxHeight : 580;
+                return SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  // Padding in basso così il portiere non resta nascosto dietro alla panchina
+                  padding: const EdgeInsets.only(bottom: 90), 
+                  child: SizedBox(
+                    height: minFieldHeight,
                     child: Column(
+                      // 1. Cambiamo in 'start' per compattare tutto verso l'alto
+                      mainAxisAlignment: MainAxisAlignment.start,
                       children: [
-                        const Divider(height: 1, thickness: 1),
-                        const SizedBox(height: 12),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                          children: List.generate(5, (index) {
-                            return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
-                          }),
+                        Padding(
+                          // 2. Regola il valore 'top' (es. 40.0) per decidere quanto distante dal bordo superiore deve stare l'attacco
+                          padding: const EdgeInsets.only(top: 90.0, left: 40.0, right: 40.0),
+                          child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                         ),
-                        const SizedBox(height: 12),
+                        
+                        // SPAZIO TRA ATTACCANTI E CENTROCAMPISTI (Modifica questo numero a piacimento)
+                        const SizedBox(height: 35), 
+                        
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
+                        ),
+                        
+                        // SPAZIO TRA CENTROCAMPISTI E DIFENSORI
+                        const SizedBox(height: 35), 
+                        
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                          child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
+                        ),
+                        
+                        // SPAZIO TRA DIFENSORI E PORTIERE
+                        const SizedBox(height: 35), 
+                        
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
-                            const SizedBox(width: 32),
-                            _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                            Expanded(child: Container()),
+                            _buildSlot('P', fieldP, (p) => fieldP = p),
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(right: 40.0),
+                                  child: _buildSlot('CT', fieldCoach, (p) => fieldCoach = p),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ],
                     ),
                   ),
-                ],
+                );
+              },
+            ),
+          ),
+          
+          // 2. LA PANCHINA (Fluttuante in basso sopra il campo scivolante)
+          Align(
+            alignment: Alignment.bottomCenter,
+            child: Container(
+              margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(24),
+                boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))],
+              ),
+              child: Theme(
+                data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  initiallyExpanded: false, 
+                  iconColor: Colors.orange[800],
+                  collapsedIconColor: Colors.black54,
+                  title: const Row(
+                    children: [
+                      Icon(Icons.airline_seat_recline_normal, color: Colors.black54, size: 20),
+                      SizedBox(width: 8),
+                      Text('PANCHINA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54, letterSpacing: 0.5)),
+                    ],
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(8, 0, 8, 16),
+                      child: Column(
+                        children: [
+                          const Divider(height: 1, thickness: 1),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                            children: List.generate(5, (index) {
+                              return _buildSlot(benchRoles[index], benchPlayers[index], (p) => benchPlayers[index] = p);
+                            }),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              _buildSlot(benchRoles[5], benchPlayers[5], (p) => benchPlayers[5] = p),
+                              const SizedBox(width: 32),
+                              _buildSlot(benchRoles[6], benchPlayers[6], (p) => benchPlayers[6] = p),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           )
@@ -946,7 +974,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
               color: Colors.white.withValues(alpha: 0.95),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, -2))],
             ),
-            // --- MOSTRA L'AVVISO DI BLOCCO O IL PULSANTE DI SALVATAGGIO ---
             child: isLineupLocked
                 ? Container(
                     padding: const EdgeInsets.all(12),
