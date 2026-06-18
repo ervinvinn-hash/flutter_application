@@ -17,6 +17,9 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   bool isLoading = true;
   bool isSaving = false;
   
+  // --- VARIABILE PER IL BLOCCO FORMAZIONE ---
+  bool isLineupLocked = false;
+  
   List<Map<String, dynamic>> roster = [];
 
   final List<String> validFormations = ['3-5-2', '3-4-3', '3-3-4', '4-5-1', '4-4-2', '4-3-3', '4-2-4', '5-4-1', '5-3-2', '5-2-3'];
@@ -58,12 +61,30 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       
       try {
         var upcomingMatch = matchesData.firstWhere((m) {
-          DateTime kickoff = DateTime.parse(m['kickoff_time']);
-          return kickoff.add(const Duration(hours: 2)).isAfter(now);
+          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
+          return kickoffLocal.add(const Duration(hours: 2)).isAfter(now);
         });
         currentMatchday = upcomingMatch['matchday'];
       } catch (e) {
         if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
+      }
+
+      // --- LOGICA DI BLOCCO/SBLOCCO AUTOMATICO ---
+      final currentRoundMatches = matchesData.where((m) => m['matchday'] == currentMatchday).toList();
+      if (currentRoundMatches.isNotEmpty) {
+        List<DateTime> matchDates = currentRoundMatches
+            .map((m) => DateTime.parse(m['kickoff_time']).toLocal())
+            .toList();
+        matchDates.sort(); // Ordine cronologico
+        
+        DateTime firstMatch = matchDates.first;
+        DateTime lastMatch = matchDates.last;
+        
+        // La finestra in cui è vietato modificare: da -15 min prima a +2h dopo
+        DateTime lockTime = firstMatch.subtract(const Duration(minutes: 15));
+        DateTime unlockTime = lastMatch.add(const Duration(hours: 2));
+        
+        isLineupLocked = now.isAfter(lockTime) && now.isBefore(unlockTime);
       }
 
       Map<String, String> teamMatches = {};
@@ -81,8 +102,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         }
       }
       
-      // --- NUOVO: RECUPERO E CALCOLO STATISTICHE REALI ---
-      // Estrapoliamo gli ID dei giocatori in rosa per scaricare solo i loro voti
+      // --- RECUPERO E CALCOLO STATISTICHE REALI ---
       List<int> rosterIds = rosterData.map<int>((r) => r['player_id'] as int).toList();
       
       List<dynamic> statsData = [];
@@ -90,7 +110,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         statsData = await client.from('matchday_stats').select().inFilter('player_id', rosterIds);
       }
 
-      // Dizionario per accumulare le statistiche: playerId -> {statistiche aggregate}
       Map<int, Map<String, dynamic>> aggregatedStats = {
         for (var id in rosterIds)
           id: { 'apps': 0, 'goals': 0, 'assists': 0, 'yellows': 0, 'reds': 0, 'sum_mv': 0.0, 'sum_fm': 0.0 }
@@ -109,7 +128,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           double mv = (stat['base_grade'] as num).toDouble();
           ag['sum_mv'] += mv;
 
-          // Calcolo FantaVoto Dinamico con Bonus/Malus
           double fm = mv;
           fm += (stat['goals_scored'] ?? 0) * 3.0;
           fm += (stat['assists'] ?? 0) * 1.0;
@@ -118,12 +136,11 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           fm -= (stat['own_goals'] ?? 0) * 2.0;
           fm += (stat['penalty_saved'] ?? 0) * 3.0;
           fm -= (stat['penalty_missed'] ?? 0) * 3.0;
-          if (stat['clean_sheet'] == true) fm += 1.0; // Bonus porta inviolata
+          if (stat['clean_sheet'] == true) fm += 1.0; 
           
           ag['sum_fm'] += fm;
         }
       }
-      // ---------------------------------------------------
 
       Map<int, Map<String, dynamic>> playersMap = { for (var p in playersData) p['id']: p };
 
@@ -133,7 +150,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         if (playersMap.containsKey(pId)) {
           String nTeam = playersMap[pId]!['national_team'] ?? '???';
           
-          // Estrapoliamo i calcoli finali per questo giocatore
           var ag = aggregatedStats[pId]!;
           int apps = ag['apps'];
           double mediaVoto = apps > 0 ? ag['sum_mv'] / apps : 0.0;
@@ -148,8 +164,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             'is_bench': row['is_bench'] ?? false,
             'is_captain': row['is_captain'] ?? false,
             'match': teamMatches[nTeam] ?? 'Riposo', 
-            
-            // ASSEGNAZIONE DELLE STATISTICHE REALI!
             'apps': apps, 
             'goals': ag['goals'], 
             'assists': ag['assists'], 
@@ -222,6 +236,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   void _changeFormation(String newFormation) {
+    if (isLineupLocked) return; // Disabilita cambio modulo se bloccato
     setState(() {
       currentFormation = newFormation;
       int reqD = int.parse(newFormation[0]);
@@ -248,76 +263,68 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   }
 
   Future<void> _saveLineup({bool forceSave = false}) async {
-    _syncRosterState(); //
-    int starters = roster.where((p) => p['is_starter'] && p['role'] != 'CT').length; //
-    bool hasCaptain = roster.any((p) => p['is_starter'] && p['is_captain'] == true && p['role'] != 'CT'); //
+    if (isLineupLocked) return;
 
-    if (!forceSave) { //
-      if (starters != 11) { //
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Devi riempire gli 11 slot sul campo! (Ora: $starters)'), backgroundColor: Colors.orange[800])); //
-        return; //
+    _syncRosterState(); 
+    int starters = roster.where((p) => p['is_starter'] && p['role'] != 'CT').length; 
+    bool hasCaptain = roster.any((p) => p['is_starter'] && p['is_captain'] == true && p['role'] != 'CT'); 
+
+    if (!forceSave) { 
+      if (starters != 11) { 
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Devi riempire gli 11 slot sul campo! (Ora: $starters)'), backgroundColor: Colors.orange[800])); 
+        return; 
       }
-      if (!hasCaptain) { //
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Manca il Capitano! Tieni premuto su un giocatore per assegnarlo.'), backgroundColor: Colors.orange[800])); //
-        return; //
+      if (!hasCaptain) { 
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Manca il Capitano! Tieni premuto su un giocatore per assegnarlo.'), backgroundColor: Colors.orange[800])); 
+        return; 
       }
     }
 
-    setState(() => isSaving = true); //
+    setState(() => isSaving = true); 
     
     try {
       final client = Supabase.instance.client;
 
-      // --- 1. CONTROLLO ANTI-FURBETTI (ORARIO SERVER) ---
-      // Recuperiamo l'ora esatta attuale direttamente dal server PostgreSQL di Supabase
-      // Per massima precisione chiediamo il timestamp al database
+      // 1. CONTROLLO ANTI-FURBETTI (ORARIO SERVER COME FALLBACK)
       final serverTimeData = await client.rpc('get_server_time').catchError((_) => null);
-      
-      // Fallback sicuro se la funzione RPC non è ancora creata: prendiamo il tempo della macchina
       DateTime serverNow = DateTime.now();
       if (serverTimeData != null) {
         serverNow = DateTime.parse(serverTimeData.toString()).toLocal();
       }
 
-      // Recuperiamo tutte le partite per capire qual è la prima in assoluto della giornata corrente
-      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true); //
+      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true); 
       
-      int currentMatchday = 1; //
-      // Troviamo la giornata attuale basandoci sulla prima partita ancora da giocare
+      int currentMatchday = 1; 
       try {
         var upcomingMatch = matchesData.firstWhere((m) {
-          DateTime kickoff = DateTime.parse(m['kickoff_time']); //
-          return kickoff.add(const Duration(hours: 2)).isAfter(serverNow);
+          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
+          return kickoffLocal.add(const Duration(hours: 2)).isAfter(serverNow);
         });
-        currentMatchday = upcomingMatch['matchday']; //
+        currentMatchday = upcomingMatch['matchday']; 
       } catch (e) {
-        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday']; //
+        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday']; 
       }
 
-      // Trova la primissima partita in assoluto di QUESTA specifica giornata
       final firstMatchOfRound = matchesData.firstWhere((m) => m['matchday'] == currentMatchday);
-      DateTime deadline = DateTime.parse(firstMatchOfRound['kickoff_time']).toLocal();
+      DateTime deadline = DateTime.parse(firstMatchOfRound['kickoff_time']).toLocal().subtract(const Duration(minutes: 15));
 
-      // SE L'ORA DEL SERVER HA SUPERATO IL FISCHIO D'INIZIO DELLA PRIMA PARTITA -> BLOCCO TOTALE
       if (serverNow.isAfter(deadline)) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(
-            '❌ INVIO BLOCCATO! La $currentMatchdayª Giornata è già iniziata il ${deadline.day}/${deadline.month} alle ${deadline.hour}:${deadline.minute.toString().padLeft(2, '0')}.',
+            '❌ INVIO BLOCCATO! Scaduto il tempo limite per la $currentMatchdayª Giornata.',
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           backgroundColor: Colors.red[900],
           duration: const Duration(seconds: 5),
         ));
-        setState(() => isSaving = false);
-        return; // Interrompe la funzione, impedendo il salvataggio su Supabase!
+        setState(() { isSaving = false; isLineupLocked = true; });
+        return; 
       }
-      // ---------------------------------------------------
 
-      // --- 2. SALVATAGGIO SE TUTTO È IN REGOLA ---
+      // 2. SALVATAGGIO IN ROSTER_PLAYERS
       for (var p in roster) {
         int bOrder = 99;
         if (p['is_bench'] == true) {
-          // Trova la posizione esatta in panchina (es. da 1 a 7)
           bOrder = benchPlayers.indexWhere((bp) => bp != null && bp['player_id'] == p['player_id']) + 1;
         }
 
@@ -325,20 +332,20 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           'is_starter': p['is_starter'],
           'is_bench': p['is_bench'],
           'is_captain': p['is_captain'] ?? false,
-          'bench_order': bOrder, // <--- SALVIAMO LA GERARCHIA!
+          'bench_order': bOrder,
         }).eq('team_id', widget.teamId).eq('player_id', p['player_id']);
       }
       
-      String msg = forceSave ? 'Bozza salvata con successo! 📝' : 'Formazione inviata! 🚀'; //
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green)); //
+      String msg = forceSave ? 'Bozza salvata con successo! 📝' : 'Formazione inviata! 🚀'; 
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.green)); 
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red)); //
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore: $e'), backgroundColor: Colors.red)); 
     } finally {
-      setState(() => isSaving = false); //
+      setState(() => isSaving = false); 
     }
   }
 
-String _getCountrySigla(String country) {
+  String _getCountrySigla(String country) {
     if (country.isEmpty || country == '???') return '???';
     final String cleanCountry = country.trim().toLowerCase();
 
@@ -362,43 +369,41 @@ String _getCountrySigla(String country) {
     };
 
     if (sigle.containsKey(cleanCountry)) return sigle[cleanCountry]!;
-    
-    // Se non trova la nazione nella mappa, prende le prime 3 lettere in maiuscolo come fallback
     return cleanCountry.length >= 3 ? cleanCountry.substring(0, 3).toUpperCase() : cleanCountry.toUpperCase();
   }
 
   void _copyLineupToClipboard() {
-    _syncRosterState(); //
+    _syncRosterState(); 
     StringBuffer sb = StringBuffer();
     
-    sb.writeln(widget.teamName); //
-    sb.writeln('Allenatore:'); //
+    sb.writeln(widget.teamName); 
+    sb.writeln('Allenatore:'); 
     
-    if (fieldCoach != null) { //
+    if (fieldCoach != null) { 
       sb.writeln('ALL - ${fieldCoach!['name']} (${_getCountrySigla(fieldCoach!['national_team'])})');
     } else {
-      sb.writeln('ALL - Nessun Allenatore'); //
+      sb.writeln('ALL - Nessun Allenatore'); 
     }
 
-    sb.writeln('Titolari:'); //
-    final roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5}; //
-    List<Map<String, dynamic>> titolari = roster.where((p) => p['is_starter'] && p['role'] != 'CT').toList(); //
-    titolari.sort((a, b) => roleOrder[a['role']]!.compareTo(roleOrder[b['role']]!)); //
+    sb.writeln('Titolari:'); 
+    final roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5}; 
+    List<Map<String, dynamic>> titolari = roster.where((p) => p['is_starter'] && p['role'] != 'CT').toList(); 
+    titolari.sort((a, b) => roleOrder[a['role']]!.compareTo(roleOrder[b['role']]!)); 
     
     for (var p in titolari) {
-      String capTag = p['is_captain'] ? ' [C]' : ''; //
+      String capTag = p['is_captain'] ? ' [C]' : ''; 
       sb.writeln('${p['role']} - ${p['name']} (${_getCountrySigla(p['national_team'])})$capTag');
     }
 
-    sb.writeln('Panchina:'); //
-    for (var p in benchPlayers) { //
-      if (p != null) { //
+    sb.writeln('Panchina:'); 
+    for (var p in benchPlayers) { 
+      if (p != null) { 
         sb.writeln('${p['role']} - ${p['name']} (${_getCountrySigla(p['national_team'])})');
       }
     }
 
-    Clipboard.setData(ClipboardData(text: sb.toString())); //
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Formazione copiata negli appunti! 📋'), backgroundColor: Colors.orange[800])); //
+    Clipboard.setData(ClipboardData(text: sb.toString())); 
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Formazione copiata negli appunti! 📋'), backgroundColor: Colors.orange[800])); 
   }
 
   Color _getRoleColor(String role) {
@@ -439,6 +444,7 @@ String _getCountrySigla(String country) {
   }
 
   void _showPlayerSelectionDialog(String role, Function(Map<String, dynamic>?) onSelected) {
+    if (isLineupLocked) return; // Disabilita apertura menu se bloccato
     List<Map<String, dynamic>> available = _getAvailablePlayers(role);
 
     showModalBottomSheet(
@@ -488,8 +494,12 @@ String _getCountrySigla(String country) {
       onTap: () => _showPlayerSelectionDialog(role, (p) {
         setState(() { onUpdate(p); _syncRosterState(); });
       }),
-      onDoubleTap: () => setState(() { onUpdate(null); _syncRosterState(); }),
+      onDoubleTap: () {
+        if (isLineupLocked) return;
+        setState(() { onUpdate(null); _syncRosterState(); });
+      },
       onLongPress: () {
+        if (isLineupLocked) return;
         if (!isEmpty && role != 'CT') { 
           setState(() {
             if (player['is_captain'] == true) {
@@ -586,8 +596,8 @@ String _getCountrySigla(String country) {
 
   Widget _buildTabCampo() {
     return Container(
-      decoration: BoxDecoration(
-        image: const DecorationImage(
+      decoration: const BoxDecoration(
+        image: DecorationImage(
           image: AssetImage('assets/foto_campo.png'),
           fit: BoxFit.cover,
           alignment: Alignment.topCenter,
@@ -596,7 +606,6 @@ String _getCountrySigla(String country) {
       ),
       child: Column(
         children: [
-          // IL CAMPO E I TITOLARI
           Expanded(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -631,35 +640,24 @@ String _getCountrySigla(String country) {
               ],
             ),
           ),
-          
-          // LA PANCHINA
           Container(
             margin: const EdgeInsets.fromLTRB(12, 4, 12, 12),
             decoration: BoxDecoration(
               color: Colors.white.withValues(alpha: 0.92),
               borderRadius: BorderRadius.circular(24),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2), 
-                  blurRadius: 8, 
-                  offset: const Offset(0, 4)
-                )
-              ],
+              boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 8, offset: const Offset(0, 4))],
             ),
             child: Theme(
               data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
               child: ExpansionTile(
-                initiallyExpanded: false, // Parte chiusa di default per preservare spazio
+                initiallyExpanded: false, 
                 iconColor: Colors.orange[800],
                 collapsedIconColor: Colors.black54,
                 title: const Row(
                   children: [
                     Icon(Icons.airline_seat_recline_normal, color: Colors.black54, size: 20),
                     SizedBox(width: 8),
-                    Text(
-                      'PANCHINA', 
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54, letterSpacing: 0.5)
-                    ),
+                    Text('PANCHINA', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.black54, letterSpacing: 0.5)),
                   ],
                 ),
                 children: [
@@ -669,7 +667,6 @@ String _getCountrySigla(String country) {
                       children: [
                         const Divider(height: 1, thickness: 1),
                         const SizedBox(height: 12),
-                        // Prima riga panchina (Primi 5 slot)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                           children: List.generate(5, (index) {
@@ -677,7 +674,6 @@ String _getCountrySigla(String country) {
                           }),
                         ),
                         const SizedBox(height: 12),
-                        // Seconda riga panchina (Ultimi 2 slot centrate)
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -878,13 +874,14 @@ String _getCountrySigla(String country) {
                                 child: Row(
                                   mainAxisAlignment: MainAxisAlignment.end,
                                   children: [
-                                    IconButton(
-                                      icon: Icon(Icons.save, color: Colors.orange[800], size: 24),
-                                      tooltip: 'Salva bozza',
-                                      padding: EdgeInsets.zero,
-                                      constraints: const BoxConstraints(),
-                                      onPressed: () => _saveLineup(forceSave: true),
-                                    ),
+                                    if (!isLineupLocked)
+                                      IconButton(
+                                        icon: Icon(Icons.save, color: Colors.orange[800], size: 24),
+                                        tooltip: 'Salva bozza',
+                                        padding: EdgeInsets.zero,
+                                        constraints: const BoxConstraints(),
+                                        onPressed: () => _saveLineup(forceSave: true),
+                                      ),
                                     const SizedBox(width: 8),
                                     IconButton(
                                       icon: Icon(Icons.share, color: Colors.orange[800], size: 24),
@@ -949,17 +946,35 @@ String _getCountrySigla(String country) {
               color: Colors.white.withValues(alpha: 0.95),
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 4, offset: const Offset(0, -2))],
             ),
-            child: ElevatedButton.icon(
-              onPressed: isSaving ? null : () => _saveLineup(forceSave: false),
-              icon: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white)) : const Icon(Icons.send),
-              label: const Text('INVIA FORMAZIONE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              style: ElevatedButton.styleFrom(
-                minimumSize: const Size.fromHeight(50),
-                backgroundColor: Colors.orange[800], 
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-            ),
+            // --- MOSTRA L'AVVISO DI BLOCCO O IL PULSANTE DI SALVATAGGIO ---
+            child: isLineupLocked
+                ? Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: Colors.red[100], borderRadius: BorderRadius.circular(12)),
+                    child: Row(
+                      children: [
+                        Icon(Icons.lock, color: Colors.red[900]),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            'Formazioni chiuse! Partite in corso.\nPotrai modificare la squadra a fine giornata.',
+                            style: TextStyle(color: Colors.red[900], fontWeight: FontWeight.bold, fontSize: 13),
+                          ),
+                        ),
+                      ],
+                    ),
+                  )
+                : ElevatedButton.icon(
+                    onPressed: isSaving ? null : () => _saveLineup(forceSave: false),
+                    icon: isSaving ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white)) : const Icon(Icons.send),
+                    label: const Text('INVIA FORMAZIONE', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(50),
+                      backgroundColor: Colors.orange[800], 
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                  ),
           ),
         ),
       ),
