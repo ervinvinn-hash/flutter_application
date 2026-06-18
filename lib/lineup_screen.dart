@@ -918,7 +918,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                       constraints: const BoxConstraints(),
                                       onPressed: _copyLineupToClipboard,
                                     ),
-                                    const SizedBox(width: 20),
+                                    const SizedBox(width: 8),
                                   ],
                                 ),
                               ),
