@@ -618,12 +618,12 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                       children: [
                         Padding(
                           // 2. Regola il valore 'top' (es. 40.0) per decidere quanto distante dal bordo superiore deve stare l'attacco
-                          padding: const EdgeInsets.only(top: 90.0, left: 40.0, right: 40.0),
+                          padding: const EdgeInsets.only(top: 50.0, left: 40.0, right: 40.0),
                           child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                         ),
                         
                         // SPAZIO TRA ATTACCANTI E CENTROCAMPISTI (Modifica questo numero a piacimento)
-                        const SizedBox(height: 35), 
+                        const SizedBox(height: 30), 
                         
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -631,7 +631,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                         ),
                         
                         // SPAZIO TRA CENTROCAMPISTI E DIFENSORI
-                        const SizedBox(height: 35), 
+                        const SizedBox(height: 30), 
                         
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20.0),
@@ -639,7 +639,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                         ),
                         
                         // SPAZIO TRA DIFENSORI E PORTIERE
-                        const SizedBox(height: 35), 
+                        const SizedBox(height: 30), 
                         
                         Row(
                           children: [
