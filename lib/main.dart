@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -46,10 +47,9 @@ class FantaMondialeApp extends StatelessWidget {
     return MaterialApp(
       title: 'FantaMondiale',
       theme: ThemeData(
-        // Tema Globale Moderno
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF1B5E20)),
         useMaterial3: true,
-        fontFamily: 'Roboto', // Usa un font di sistema pulito
+        fontFamily: 'Roboto', 
         appBarTheme: const AppBarTheme(
           centerTitle: true,
           elevation: 0,
@@ -86,7 +86,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _setupRealtimeNotifications();
   }
 
-  // --- IL MOTORE DELLE NOTIFICHE IN TEMPO REALE ---
   void _setupRealtimeNotifications() {
     _tradeChannel = Supabase.instance.client.channel('public:pending_trades');
     
@@ -96,7 +95,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       table: 'pending_trades',
       callback: (payload) {
         final newRecord = payload.newRecord;
-        // Se qualcuno HA INVIATO una proposta a TE
         if (newRecord['receiver_team_id'] == widget.teamId && mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -116,28 +114,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final newRecord = payload.newRecord;
         final oldRecord = payload.oldRecord;
         
-        // Se una trattativa è APPENA stata accettata (passaggio da pending a accepted)
         if (newRecord['status'] == 'accepted' && oldRecord['status'] != 'accepted') {
-          // Chiama la nuova funzione che scarica i nomi e costruisce il pop-up dettagliato
           await _showDetailedTradeNotification(newRecord);
         }
       }
     ).subscribe();
   }
 
-  // --- COSTRUISCE LA BREAKING NEWS DI MERCATO (VERSIONE VIP) ---
   Future<void> _showDetailedTradeNotification(Map<String, dynamic> record) async {
     try {
       final client = Supabase.instance.client;
 
-      // 1. Recupera i nomi delle due squadre
       final senderTeamData = await client.from('fantasy_teams').select('team_name').eq('id', record['sender_team_id']).maybeSingle();
       final receiverTeamData = await client.from('fantasy_teams').select('team_name').eq('id', record['receiver_team_id']).maybeSingle();
       
       String senderTeam = senderTeamData?['team_name'] ?? 'Squadra Ignota';
       String receiverTeam = receiverTeamData?['team_name'] ?? 'Squadra Ignota';
 
-      // 2. Recupera i nomi
       List<dynamic> senderPlayerIds = record['sender_player_ids'];
       final senderPlayersData = await client.from('players').select('name').inFilter('id', senderPlayerIds);
       String senderPlayers = senderPlayersData.map((p) => p['name']).join(', ');
@@ -146,7 +139,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final receiverPlayersData = await client.from('players').select('name').inFilter('id', receiverPlayerIds);
       String receiverPlayers = receiverPlayersData.map((p) => p['name']).join(', ');
 
-      // 3. Mostra il pop-up VIP a schermo
       if (mounted) {
         showDialog(
           context: context,
@@ -158,16 +150,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               child: Container(
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  // Sfondo scuro elegante tipo notte di Champions
                   gradient: const LinearGradient(
                     colors: [Color(0xFF141E30), Color(0xFF243B55)],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
                   ),
                   borderRadius: BorderRadius.circular(24),
-                  // Bordo dorato
                   border: Border.all(color: Colors.amberAccent, width: 2), 
-                  // Ombra "Glow" dorata in stile VIP
                   boxShadow: [
                     BoxShadow(color: Colors.amberAccent.withValues(alpha: 0.3), blurRadius: 30, spreadRadius: 5, offset: const Offset(0, 0)),
                   ],
@@ -175,7 +164,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min, 
                   children: [
-                    // --- INTESTAZIONE VIP ---
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
@@ -196,25 +184,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const Divider(color: Colors.amberAccent, thickness: 1, height: 30),
                     const SizedBox(height: 10),
                     
-                    // --- ICONA CENTRALE LUMINOSA ---
                     Stack(
                       alignment: Alignment.center,
                       children: [
-                        Icon(Icons.handshake, color: Colors.white.withValues(alpha: 0.1), size: 90), // Ombra dietro
-                        const Icon(Icons.handshake, color: Colors.white, size: 75), // Icona principale
+                        Icon(Icons.handshake, color: Colors.white.withValues(alpha: 0.1), size: 90), 
+                        const Icon(Icons.handshake, color: Colors.white, size: 75), 
                         const Positioned(
                           top: 0, right: 0,
-                          child: Icon(Icons.star, color: Colors.amberAccent, size: 24), // Stellina chic
+                          child: Icon(Icons.star, color: Colors.amberAccent, size: 24), 
                         )
                       ],
                     ),
                     const SizedBox(height: 30),
                     
-                    // --- TESTO FORMATTATO (RICH TEXT) ---
                     RichText(
                       textAlign: TextAlign.center,
                       text: TextSpan(
-                        style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.white70), // Stile base
+                        style: const TextStyle(fontSize: 16, height: 1.5, color: Colors.white70), 
                         children: [
                           TextSpan(text: senderTeam, style: const TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 20)),
                           const TextSpan(text: '\nha ceduto\n'),
@@ -229,7 +215,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     
                     const SizedBox(height: 30),
                     
-                    // --- BOTTONE DI CHIUSURA ELEGANTE ---
                     ElevatedButton(
                       onPressed: () => Navigator.of(ctx).pop(),
                       style: ElevatedButton.styleFrom(
@@ -255,7 +240,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   @override
   void dispose() {
-    Supabase.instance.client.removeChannel(_tradeChannel); // Spegne la radio quando esci
+    Supabase.instance.client.removeChannel(_tradeChannel); 
     super.dispose();
   }
 
@@ -426,7 +411,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   child: Text('MENU PRINCIPALE', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 1.5)),
                 ),
 
-                // --- GRIGLIA PULSANTI MODERNA ---
                 GridView.count(
                   shrinkWrap: true, 
                   physics: const NeverScrollableScrollPhysics(), 
@@ -435,7 +419,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   crossAxisSpacing: 12,
                   childAspectRatio: 1.6, 
                   children: [
-                    _buildGridButton(context, 'Schiera\nFormazione', Icons.sports_soccer, TeamLineupScreen(teamId: widget.teamId, teamName: widget.teamName)),
+                    // --- ECCO IL NOSTRO NUOVO BOTTONE INTELLIGENTE ---
+                    LineupGridButton(teamId: widget.teamId, teamName: widget.teamName),
+                    
                     _buildGridButton(context, 'Mercato e\nRosa', Icons.shopping_cart_outlined, RosterScreen(teamId: widget.teamId)),
                     _buildGridButton(context, 'Calendario\nRisultati', Icons.calendar_month, const CalendarScreen()),
                     _buildGridButton(context, 'Classifica\nLega', Icons.emoji_events_outlined, StandingsScreen(teamId: widget.teamId)),
@@ -444,58 +430,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 
-                // --- INIZIO BOTTONE CALENDARIO MONDIALI ---
-Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-  child: InkWell(
-    onTap: () {
-      Navigator.push(
-        context, 
-        MaterialPageRoute(builder: (context) => const GiornateScreen()),
-      );
-    },
-    borderRadius: BorderRadius.circular(16),
-    child: Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-      decoration: BoxDecoration(
-        // Un gradiente arancione in stile VIP FantaMondiale
-        gradient: LinearGradient(
-          colors: [Colors.orange[800]!, Colors.orange[600]!],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.orange.withValues(alpha: 0.4), 
-            blurRadius: 8, 
-            offset: const Offset(0, 4)
-          ),
-        ],
-      ),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.calendar_month, color: Colors.white, size: 28),
-          SizedBox(width: 12),
-          Text(
-            'CALENDARIO MONDIALI',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-            ),
-          ),
-        ],
-      ),
-    ),
-  ),
-),
-// --- FINE BOTTONE CALENDARIO MONDIALI ---
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                  child: InkWell(
+                    onTap: () {
+                      Navigator.push(
+                        context, 
+                        MaterialPageRoute(builder: (context) => const GiornateScreen()),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(16),
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [Colors.orange[800]!, Colors.orange[600]!],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.orange.withValues(alpha: 0.4), 
+                            blurRadius: 8, 
+                            offset: const Offset(0, 4)
+                          ),
+                        ],
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.calendar_month, color: Colors.white, size: 28),
+                          SizedBox(width: 12),
+                          Text(
+                            'CALENDARIO MONDIALI',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              letterSpacing: 1.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
 
-                // --- SEZIONE ADMIN ---
                 if (widget.isAdmin) ...[
                   const SizedBox(height: 40),
                   Container(
@@ -529,6 +511,193 @@ Padding(
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// NUOVO WIDGET: PULSANTE GRIGLIA CON COUNTDOWN INTEGRATO
+// ============================================================================
+class LineupGridButton extends StatefulWidget {
+  final String teamId;
+  final String teamName;
+
+  const LineupGridButton({super.key, required this.teamId, required this.teamName});
+
+  @override
+  State<LineupGridButton> createState() => _LineupGridButtonState();
+}
+
+class _LineupGridButtonState extends State<LineupGridButton> {
+  DateTime? _lockTime;
+  DateTime? _unlockTime;
+  Timer? _timer;
+  
+  String _countdownText = "";
+  bool _isLocked = false;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDeadline();
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _fetchDeadline() async {
+    try {
+      final client = Supabase.instance.client;
+      final serverTimeData = await client.rpc('get_server_time').catchError((_) => null);
+      DateTime serverNow = DateTime.now();
+      if (serverTimeData != null) {
+        serverNow = DateTime.parse(serverTimeData.toString()).toLocal();
+      }
+
+      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true);
+      
+      int currentMatchday = 1;
+      try {
+        var upcomingMatch = matchesData.firstWhere((m) {
+          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
+          return kickoffLocal.add(const Duration(hours: 2)).isAfter(serverNow);
+        });
+        currentMatchday = upcomingMatch['matchday'];
+      } catch (e) {
+        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
+      }
+
+      final currentRoundMatches = matchesData.where((m) => m['matchday'] == currentMatchday).toList();
+      if (currentRoundMatches.isNotEmpty) {
+        List<DateTime> matchDates = currentRoundMatches
+            .map((m) => DateTime.parse(m['kickoff_time']).toLocal())
+            .toList();
+        matchDates.sort(); 
+        
+        DateTime firstMatch = matchDates.first;
+        DateTime lastMatch = matchDates.last;
+        
+        _lockTime = firstMatch.subtract(const Duration(minutes: 15));
+        _unlockTime = lastMatch.add(const Duration(hours: 2));
+      }
+      
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _startTimer();
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _startTimer() {
+    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted || _lockTime == null || _unlockTime == null) return;
+
+      DateTime now = DateTime.now();
+
+      if (now.isAfter(_lockTime!) && now.isBefore(_unlockTime!)) {
+        setState(() {
+          _isLocked = true;
+          _countdownText = "🔒 IN CORSO";
+        });
+      } else if (now.isBefore(_lockTime!)) {
+        Duration diff = _lockTime!.difference(now);
+        
+        int days = diff.inDays;
+        int hours = diff.inHours % 24;
+        int minutes = diff.inMinutes % 60;
+        int seconds = diff.inSeconds % 60;
+
+        String timeStr = '';
+        if (days > 0) {
+          timeStr = "$days gg ${hours.toString().padLeft(2, '0')}h ${minutes.toString().padLeft(2, '0')}m";
+        } else {
+          timeStr = "${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}";
+        }
+
+        setState(() {
+          _isLocked = false;
+          _countdownText = timeStr;
+        });
+      } else {
+        timer.cancel();
+        _fetchDeadline(); 
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: () {
+        Navigator.push(
+          context, 
+          MaterialPageRoute(
+            builder: (context) => TeamLineupScreen(teamId: widget.teamId, teamName: widget.teamName)
+          )
+        );
+      },
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.7),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(color: Colors.black.withValues(alpha: 0.1), blurRadius: 10, offset: const Offset(0, 5))
+          ],
+        ),
+        // --- USIAMO LO STACK PER NON SPOSTARE L'ICONA ---
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            // 1. Pallone e testo principale perfettamente centrati (come gli altri pulsanti)
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: _isLocked ? Colors.red[50] : Colors.green[50],
+                    shape: BoxShape.circle,
+                  ),
+                  child: _isLoading 
+                    ? const SizedBox(width: 26, height: 26, child: CircularProgressIndicator(strokeWidth: 2))
+                    : Icon(
+                        _isLocked ? Icons.lock : Icons.sports_soccer, 
+                        size: 26, 
+                        color: _isLocked ? Colors.red[800] : Colors.green[800]
+                      ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'Schiera\nFormazione',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey[800], height: 1.1),
+                ),
+              ],
+            ),
+            
+            // 2. Il timer ancorato in basso che non interferisce col resto
+            if (!_isLoading && _countdownText.isNotEmpty)
+              Positioned(
+                bottom: 8, // Distanza dal bordo inferiore (puoi alzarla o abbassarla se serve)
+                child: Text(
+                  _countdownText,
+                  style: TextStyle(
+                    color: _isLocked ? Colors.red[800] : Colors.orange[800], 
+                    fontSize: 10, 
+                    fontWeight: FontWeight.bold
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
