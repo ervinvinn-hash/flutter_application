@@ -65,16 +65,44 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
         .trim();
   }
 
-  Future<void> _importFromApiFootball() async {
+  // --- NUOVA FUNZIONE: Apre il calendario per scegliere la data ---
+  Future<void> _selectDateAndImport() async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2026, 6, 1), // Inizio indicativo dei mondiali
+      lastDate: DateTime(2026, 7, 31), // Fine indicativa dei mondiali
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: Colors.red[800]!, 
+              onPrimary: Colors.white, 
+              onSurface: Colors.black, 
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked != null) {
+      // Formatta la data scelta nel formato YYYY-MM-DD richiesto dall'API
+      String selectedDate = picked.toIso8601String().split('T')[0];
+      _importFromApiFootball(selectedDate);
+    }
+  }
+
+  // --- AGGIORNATA: Ora accetta la data come parametro ---
+  Future<void> _importFromApiFootball(String targetDate) async {
     setState(() => isFetchingApi = true);
     try {
       final String apiKey = 'bce05b8a0e7f20ab55f3cf2a69f7102b'; 
-      String today = DateTime.now().toIso8601String().split('T')[0];
 
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ricerca partite del $today...'), backgroundColor: Colors.orange[800]));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ricerca partite del $targetDate...'), backgroundColor: Colors.orange[800]));
 
       final fixturesRes = await http.get(
-        Uri.parse('https://v3.football.api-sports.io/fixtures?date=$today'),
+        Uri.parse('https://v3.football.api-sports.io/fixtures?date=$targetDate'),
         headers: {'x-apisports-key': apiKey},
       );
       
@@ -90,12 +118,9 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
       int updatedCount = 0;
 
       for (var fix in fixtures) {
-        // SPOSTATO IL TRY-CATCH QUI DENTRO
         try {
           int fixId = fix['fixture']['id'];
           
-          // --- FIX RATE LIMITING ---
-          // Mettiamo in pausa l'app per 2 secondi tra una chiamata e l'altra per non farsi bloccare dall'API
           await Future.delayed(const Duration(seconds: 2));
           
           final statsRes = await http.get(
@@ -117,7 +142,6 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
               
               String apiName = _normalizeName(playerInfo['name'].toString());
               
-              // Arrotondamento ai mezzi punti (es. 6.3 -> 6.5)
               double rawRating = double.tryParse(stats['games']['rating']?.toString() ?? '6.0') ?? 6.0;
               double rating = (rawRating * 2).round() / 2.0;
               
@@ -165,7 +189,6 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
             }
           }
         } catch (innerError) {
-          // Se una singola partita fallisce (es. timeout), la salta e passa alla prossima senza far crollare tutto
           print('❌ ERRORE FETCH PARTITA: $innerError');
           continue; 
         }
@@ -240,12 +263,11 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
             else if (position == 'Midfielder') fantaRole = 'C';
             else if (position == 'Attacker') fantaRole = 'A';
 
-            // --- NUOVO: Calcolo il cognome pulito ---
             String sortName = name.contains('.') ? name.split('.').last.trim() : name;
 
             giocatoriDaInserire.add({
               'name': name,
-              'sort_name': sortName, // <-- Colonna aggiunta
+              'sort_name': sortName, 
               'role': fantaRole,
               'national_team': teamName,
               'price': 10, 
@@ -317,14 +339,12 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
             goalsConceded: stat != null ? stat['goals_conceded'] : 0,
             coachMultiplier: stat != null ? (stat['coach_multiplier'] as num?)?.toDouble() ?? 0.0 : 0.0,
           ));
-          // Forza il voto base a 0 se è un CT
           if (p['role'] == 'CT') {
             loadedPlayers.last.baseGrade = 0.0;
           }
         }
       }
 
-      // Ordiniamo in locale prima per ruolo e poi per cognome
       final roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5};
       loadedPlayers.sort((a, b) {
         int roleComparison = roleOrder[a.role]!.compareTo(roleOrder[b.role]!);
@@ -506,9 +526,7 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                     ),
                     const Divider(height: 30, thickness: 2),
 
-                    // --- INCOLLA QUESTO NUOVO BLOCCO ---
                     if (stat.role == 'CT') ...[
-                      // Mostra il Bonus se è un Allenatore
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -524,7 +542,6 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                       ),
                       const Divider(),
                     ] else ...[
-                      // Mostra il Voto Base per tutti gli altri giocatori
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -568,11 +585,9 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                       ]
                     ],
 
-                    // ... sopra ci sono i vari contatori e switch ...
                     const SizedBox(height: 20),
                     Row(
                       children: [
-                        // NUOVO BOTTONE AZZERA / ELIMINA VOTO
                         Expanded(
                           flex: 2,
                           child: OutlinedButton.icon(
@@ -590,7 +605,6 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        // IL TUO BOTTONE SALVA ORIGINALE
                         Expanded(
                           flex: 3,
                           child: ElevatedButton(
@@ -632,26 +646,22 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // RIGA 1: TITOLO
             const Text('Gestione Voti', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
             const SizedBox(height: 12),
             
-            // RIGA 2: ICONE A SINISTRA E MENU A DESTRA
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // GRUPPO BOTTONI (Solo Rose e Download Manuale)
                 Row(
                   children: [
-                    // Nel build dell'AppBar di AdminVotesScreen:
                     IconButton(
                       icon: const Icon(Icons.manage_accounts),
                       tooltip: 'Modifica Ruoli',
                       onPressed: () => Navigator.push(
-                      context, 
-                    MaterialPageRoute(builder: (context) => const AdminRolesPage())
-                     ),
-                  ),
+                        context, 
+                        MaterialPageRoute(builder: (context) => const AdminRolesPage())
+                      ),
+                    ),
                     IconButton(
                       icon: const Icon(Icons.group_add),
                       tooltip: 'Scarica Rose Ufficiali',
@@ -663,15 +673,14 @@ class _AdminVotesScreenState extends State<AdminVotesScreen> {
                     isFetchingApi 
                       ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                       : IconButton(
-                          icon: const Icon(Icons.download),
-                          tooltip: 'Scarica Voti Ora (Singolo)',
+                          icon: const Icon(Icons.calendar_month), // Cambiata l'icona in un calendario per renderla più chiara
+                          tooltip: 'Seleziona data e scarica Voti',
                           padding: EdgeInsets.zero,
                           constraints: const BoxConstraints(),
-                          onPressed: _importFromApiFootball,
+                          onPressed: _selectDateAndImport, // Sostituito il richiamo diretto all'API
                         ),
                   ],
                 ),
-                // MENU A TENDINA GIORNATA
                 DropdownButtonHideUnderline(
                   child: DropdownButton<int>(
                     dropdownColor: Colors.red[900],
