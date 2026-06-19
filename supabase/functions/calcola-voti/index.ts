@@ -21,7 +21,7 @@ const normalizeName = (name: string) => {
     .trim();
 };
 
-serve(async (req) => {
+serve(async (req: Request) => {
   try {
     const apiKey = Deno.env.get('API_KEY') ?? ''
 
@@ -126,7 +126,7 @@ serve(async (req) => {
 
     return new Response(JSON.stringify({ message: `Successo! Giornata ${currentMatchday}: ${aggiornati} giocatori aggiornati.` }), { status: 200 })
     
-  } catch (error) {
+  } catch (error: any) {
     console.error("Errore durante l'esecuzione:", error);
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
