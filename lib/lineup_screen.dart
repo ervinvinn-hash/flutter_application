@@ -52,51 +52,8 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       final rosterData = await client.from('roster_players').select().eq('team_id', widget.teamId);
       final playersData = await client.from('players').select('id, name, role, national_team');
       
-      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true);
-      
-      int currentMatchday = 1;
-      final now = DateTime.now();
-      
-      try {
-        var upcomingMatch = matchesData.firstWhere((m) {
-          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
-          return kickoffLocal.add(const Duration(hours: 2)).isAfter(now);
-        });
-        currentMatchday = upcomingMatch['matchday'];
-      } catch (e) {
-        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
-      }
-
-      final currentRoundMatches = matchesData.where((m) => m['matchday'] == currentMatchday).toList();
-      if (currentRoundMatches.isNotEmpty) {
-        List<DateTime> matchDates = currentRoundMatches
-            .map((m) => DateTime.parse(m['kickoff_time']).toLocal())
-            .toList();
-        matchDates.sort(); 
-        
-        DateTime firstMatch = matchDates.first;
-        DateTime lastMatch = matchDates.last;
-        
-        DateTime lockTime = firstMatch.subtract(const Duration(minutes: 15));
-        DateTime unlockTime = lastMatch.add(const Duration(hours: 2));
-        
-        isLineupLocked = now.isAfter(lockTime) && now.isBefore(unlockTime);
-      }
-
-      Map<String, String> teamMatches = {};
-      for (var m in matchesData) {
-        if (m['matchday'] == currentMatchday) {
-          String home = m['home_team'];
-          String away = m['away_team'];
-          
-          String siglaHome = home.length >= 3 ? home.substring(0, 3).toUpperCase() : home.toUpperCase();
-          String siglaAway = away.length >= 3 ? away.substring(0, 3).toUpperCase() : away.toUpperCase();
-          String matchString = '$siglaHome - $siglaAway';
-          
-          teamMatches[home] = matchString;
-          teamMatches[away] = matchString;
-        }
-      }
+      // 🔥 HOTFIX: Sblocchiamo la formazione forzatamente
+      isLineupLocked = false;
       
       List<int> rosterIds = rosterData.map<int>((r) => r['player_id'] as int).toList();
       
@@ -158,7 +115,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             'is_starter': row['is_starter'] ?? false,
             'is_bench': row['is_bench'] ?? false,
             'is_captain': row['is_captain'] ?? false,
-            'match': teamMatches[nTeam] ?? 'Riposo', 
+            'match': 'N/A', // 🔥 HOTFIX: Partita finta
             'apps': apps, 
             'goals': ag['goals'], 
             'assists': ag['assists'], 
@@ -280,40 +237,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     try {
       final client = Supabase.instance.client;
 
-      final serverTimeData = await client.rpc('get_server_time').catchError((_) => null);
-      DateTime serverNow = DateTime.now();
-      if (serverTimeData != null) {
-        serverNow = DateTime.parse(serverTimeData.toString()).toLocal();
-      }
-
-      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true); 
-      
-      int currentMatchday = 1; 
-      try {
-        var upcomingMatch = matchesData.firstWhere((m) {
-          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
-          return kickoffLocal.add(const Duration(hours: 2)).isAfter(serverNow);
-        });
-        currentMatchday = upcomingMatch['matchday']; 
-      } catch (e) {
-        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday']; 
-      }
-
-      final firstMatchOfRound = matchesData.firstWhere((m) => m['matchday'] == currentMatchday);
-      DateTime deadline = DateTime.parse(firstMatchOfRound['kickoff_time']).toLocal().subtract(const Duration(minutes: 15));
-
-      if (serverNow.isAfter(deadline)) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(
-            '❌ INVIO BLOCCATO! Scaduto il tempo limite per la $currentMatchdayª Giornata.',
-            style: const TextStyle(fontWeight: FontWeight.bold),
-          ),
-          backgroundColor: Colors.red[900],
-          duration: const Duration(seconds: 5),
-        ));
-        setState(() { isSaving = false; isLineupLocked = true; });
-        return; 
-      }
+      // 🔥 HOTFIX: Rimosso completamente il blocco temporale che faceva crashare l'app in assenza di partite
 
       for (var p in roster) {
         int bOrder = 99;
@@ -587,60 +511,45 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     );
   }
 
-  // --- LA NUOVA SEZIONE CAMPO SCROLLABILE ---
   Widget _buildTabCampo() {
     return Container(
       decoration: const BoxDecoration(
         image: DecorationImage(
           image: AssetImage('assets/foto_campo.png'),
-          fit: BoxFit.cover, // Copre l'intero background in modo fisso
+          fit: BoxFit.cover,
           alignment: Alignment.topCenter,
           colorFilter: ColorFilter.mode(Colors.black26, BlendMode.darken),
         ),
       ),
       child: Stack(
         children: [
-          // 1. IL CAMPO (Scrollabile per adattarsi a tutti gli schermi)
           Positioned.fill(
             child: LayoutBuilder(
               builder: (context, constraints) {
-                // Imposta un'altezza minima (580) per mantenere intatte le proporzioni del campo
                 double minFieldHeight = constraints.maxHeight > 580 ? constraints.maxHeight : 580;
                 return SingleChildScrollView(
                   physics: const BouncingScrollPhysics(),
-                  // Padding in basso così il portiere non resta nascosto dietro alla panchina
                   padding: const EdgeInsets.only(bottom: 90), 
                   child: SizedBox(
                     height: minFieldHeight,
                     child: Column(
-                      // 1. Cambiamo in 'start' per compattare tutto verso l'alto
                       mainAxisAlignment: MainAxisAlignment.start,
                       children: [
                         Padding(
-                          // 2. Regola il valore 'top' (es. 40.0) per decidere quanto distante dal bordo superiore deve stare l'attacco
                           padding: const EdgeInsets.only(top: 50.0, left: 40.0, right: 40.0),
                           child: _buildRowOfSlots(fieldA, 'A', (i, p) => fieldA[i] = p),
                         ),
-                        
-                        // SPAZIO TRA ATTACCANTI E CENTROCAMPISTI (Modifica questo numero a piacimento)
                         const SizedBox(height: 30), 
-                        
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20.0),
                           child: _buildRowOfSlots(fieldC, 'C', (i, p) => fieldC[i] = p),
                         ),
-                        
-                        // SPAZIO TRA CENTROCAMPISTI E DIFENSORI
                         const SizedBox(height: 30), 
-                        
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20.0),
                           child: _buildRowOfSlots(fieldD, 'D', (i, p) => fieldD[i] = p),
                         ),
-                        
-                        // SPAZIO TRA DIFENSORI E PORTIERE
                         const SizedBox(height: 30), 
-                        
                         Row(
                           children: [
                             Expanded(child: Container()),
@@ -663,8 +572,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
               },
             ),
           ),
-          
-          // 2. LA PANCHINA (Fluttuante in basso sopra il campo scivolante)
           Align(
             alignment: Alignment.bottomCenter,
             child: Container(
@@ -852,7 +759,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              // 1. ZONA SINISTRA: Nome Squadra (Prende tutto lo spazio disponibile a sinistra)
                               Expanded(
                                 child: Row(
                                   children: [
@@ -868,12 +774,9 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                   ],
                                 ),
                               ),
-                              
-                              // 2. ZONA DESTRA: Il "Blocco Invisibile" con moduli e tasti compattati
                               Row(
-                                mainAxisSize: MainAxisSize.min, // Questo è il trucco: occupa solo lo spazio stretto necessario
+                                mainAxisSize: MainAxisSize.min, 
                                 children: [
-                                  // --- MODULO ---
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                                     decoration: BoxDecoration(
@@ -903,11 +806,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                       ],
                                     ),
                                   ),
-                                  
-                                  // --- SPAZIO 10px ---
                                   const SizedBox(width: 10),
-                                  
-                                  // --- TASTO SALVA ---
                                   if (!isLineupLocked)
                                     IconButton(
                                       icon: Icon(Icons.save, color: Colors.orange[800], size: 26),
@@ -916,11 +815,8 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                                       constraints: const BoxConstraints(),
                                       onPressed: () => _saveLineup(forceSave: true),
                                     ),                                  
-                                  // (Se il tasto salva non c'è, mettiamo comunque lo spazio corretto per condividi)
                                   if (!isLineupLocked) const SizedBox(width: 10),
-                                  if (isLineupLocked) const SizedBox(width: 6), // Piccolo compenso se è bloccato
-                                  
-                                  // --- TASTO CONDIVIDI ---
+                                  if (isLineupLocked) const SizedBox(width: 6),
                                   IconButton(
                                     icon: Icon(Icons.share, color: Colors.orange[800], size: 26),
                                     tooltip: 'Copia formazione',
