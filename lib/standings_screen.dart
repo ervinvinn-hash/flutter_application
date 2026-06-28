@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 // --- CLASSI DATI ---
-
 class TeamRanking {
   final String id;
   final String teamName;
@@ -19,7 +19,6 @@ class TeamRanking {
 }
 
 // --- SCHERMATA PRINCIPALE ---
-
 class StandingsScreen extends StatefulWidget {
   final String teamId;
 
@@ -32,11 +31,20 @@ class StandingsScreen extends StatefulWidget {
 class _StandingsScreenState extends State<StandingsScreen> {
   Map<String, List<TeamRanking>> groups = {};
   bool isLoading = true;
+  bool isAdmin = false;
 
   @override
   void initState() {
     super.initState();
+    _checkAdminStatus();
     _fetchStandingsFromDatabase();
+  }
+
+  Future<void> _checkAdminStatus() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      isAdmin = prefs.getBool('isAdmin') ?? false;
+    });
   }
 
   Future<void> _fetchStandingsFromDatabase() async {
@@ -46,7 +54,6 @@ class _StandingsScreenState extends State<StandingsScreen> {
 
       for (var row in data) {
         String group = row['group_name'] ?? '-';
-        
         if (group != 'A' && group != 'B') continue;
 
         TeamRanking team = TeamRanking(
@@ -89,22 +96,77 @@ class _StandingsScreenState extends State<StandingsScreen> {
     }
   }
 
+  // --- 🔥 IL TASTO MAGICO PER L'ADMIN ---
+  Future<void> _generatePlayoffMatches() async {
+    if (groups['A'] == null || groups['B'] == null || groups['A']!.length < 3 || groups['B']!.length < 3) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('I gironi non sono completi!', style: TextStyle(color: Colors.white)), backgroundColor: Colors.red));
+      return;
+    }
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Genera Playoff Ufficiali'),
+        content: const Text('Vuoi generare ufficialmente le partite di Andata e Ritorno per i Playoff nel database?\n\nQuesta operazione riempirà la Giornata 4 e 5 del Calendario Fasi Finali.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
+            onPressed: () async {
+              Navigator.pop(ctx);
+              try {
+                final tA1 = groups['A']![0].id;
+                final tA2 = groups['A']![1].id;
+                final tA3 = groups['A']![2].id;
+                
+                final tB1 = groups['B']![0].id;
+                final tB2 = groups['B']![1].id;
+                final tB3 = groups['B']![2].id;
+
+                final client = Supabase.instance.client;
+                
+                // Matchday 4: Andata
+                await client.from('matches').insert([
+                  {'home_team_id': tA1, 'away_team_id': tB3, 'match_day': 4, 'phase': 'Playoff (Andata)'},
+                  {'home_team_id': tA2, 'away_team_id': tB2, 'match_day': 4, 'phase': 'Playoff (Andata)'},
+                  {'home_team_id': tA3, 'away_team_id': tB1, 'match_day': 4, 'phase': 'Playoff (Andata)'},
+                ]);
+
+                // Matchday 5: Ritorno (Campi invertiti)
+                await client.from('matches').insert([
+                  {'home_team_id': tB3, 'away_team_id': tA1, 'match_day': 5, 'phase': 'Playoff (Ritorno)'},
+                  {'home_team_id': tB2, 'away_team_id': tA2, 'match_day': 5, 'phase': 'Playoff (Ritorno)'},
+                  {'home_team_id': tB1, 'away_team_id': tA3, 'match_day': 5, 'phase': 'Playoff (Ritorno)'},
+                ]);
+
+                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('🪄 Partite generate! Vai nel Calendario a controllare.'), backgroundColor: Colors.green));
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Errore DB: $e'), backgroundColor: Colors.red));
+              }
+            },
+            child: const Text('Genera Partite'),
+          )
+        ]
+      )
+    );
+  }
+
   Widget _buildGroupTable(String groupName, List<TeamRanking> teams) {
     return Card(
       margin: const EdgeInsets.all(12.0),
       elevation: 8,
-      color: Colors.white.withOpacity(0.9), // Effetto vetro VIP
+      color: Colors.white.withOpacity(0.9), 
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       clipBehavior: Clip.antiAlias,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Container(
-            color: groupName == 'A' ? Colors.orange[800] : Colors.orange[800], // Colori eleganti e scuri per i gironi
+            color: groupName == 'A' ? Colors.orange[800] : Colors.orange[800], 
             padding: const EdgeInsets.all(12.0),
             child: Text(
               'GIRONE $groupName',
-              style: TextStyle(color: const Color.fromARGB(255, 0, 0, 0), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2), // Testo oro/arancio
+              style: const TextStyle(color: Color.fromARGB(255, 0, 0, 0), fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 2), 
               textAlign: TextAlign.center,
             ),
           ),
@@ -125,7 +187,6 @@ class _StandingsScreenState extends State<StandingsScreen> {
             int position = entry.key + 1;
             TeamRanking team = entry.value;
 
-            // La tua squadra si evidenzia in arancio chiaro, i primi 3 hanno un tocco delicato
             Color? rowColor = team.isMyTeam 
                 ? Colors.orange[100]?.withOpacity(0.7) 
                 : (position <= 3 ? Colors.green[50]?.withOpacity(0.4) : Colors.transparent);
@@ -166,23 +227,31 @@ class _StandingsScreenState extends State<StandingsScreen> {
     return Container(
       decoration: const BoxDecoration(
         image: DecorationImage(
-          image: AssetImage('assets/sfondo.png'), // Sfondo globale
+          image: AssetImage('assets/sfondo.png'), 
           fit: BoxFit.cover,
         ),
       ),
       child: DefaultTabController(
         length: 2,
         child: Scaffold(
-          backgroundColor: Colors.transparent, // Mantiene lo sfondo visibile
+          backgroundColor: Colors.transparent, 
           appBar: AppBar(
             title: const Text('Classifica Lega', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
-            backgroundColor: Colors.white.withOpacity(0.8), // Barra stile vetro
+            backgroundColor: Colors.white.withOpacity(0.8), 
             elevation: 0,
             iconTheme: const IconThemeData(color: Colors.black),
+            actions: [
+              if (isAdmin && !isLoading)
+                IconButton(
+                  icon: Icon(Icons.auto_awesome, color: Colors.orange[900]),
+                  tooltip: 'Genera Partite Playoff',
+                  onPressed: _generatePlayoffMatches,
+                ),
+            ],
             bottom: TabBar(
               labelColor: Colors.black,
               unselectedLabelColor: Colors.black54,
-              indicatorColor: Colors.orange[800], // Indicatore VIP
+              indicatorColor: Colors.orange[800], 
               labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
               tabs: const [
                 Tab(text: 'GIRONI'),
@@ -192,7 +261,6 @@ class _StandingsScreenState extends State<StandingsScreen> {
           ),
           body: TabBarView(
             children: [
-              // TAB 1: GIRONI
               isLoading
                   ? const Center(child: CircularProgressIndicator(color: Colors.orange))
                   : groups.isEmpty 
@@ -205,8 +273,6 @@ class _StandingsScreenState extends State<StandingsScreen> {
                             return _buildGroupTable(groupName, groups[groupName]!);
                           },
                         ),
-
-              // TAB 2: ELIMINAZIONE DIRETTA
               KnockoutBracketWidget(groups: groups),
             ],
           ),
@@ -217,7 +283,6 @@ class _StandingsScreenState extends State<StandingsScreen> {
 }
 
 // --- WIDGET ELIMINAZIONE DIRETTA ---
-
 class KnockoutBracketWidget extends StatefulWidget {
   final Map<String, List<TeamRanking>> groups; 
 
@@ -252,7 +317,7 @@ class _KnockoutBracketWidgetState extends State<KnockoutBracketWidget> with Sing
   Widget _buildMatchupCard(String title, String team1, String team2, {bool isTwoLegs = true}) {
     return Card(
       elevation: 6,
-      color: Colors.white.withOpacity(0.95), // Effetto vetro solido
+      color: Colors.white.withOpacity(0.95), 
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       child: Column(
@@ -261,7 +326,7 @@ class _KnockoutBracketWidgetState extends State<KnockoutBracketWidget> with Sing
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.orange[800], // Tema VIP per l'intestazione partita
+              color: Colors.orange[800], 
               borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
             ),
             child: Text(
@@ -324,7 +389,7 @@ class _KnockoutBracketWidgetState extends State<KnockoutBracketWidget> with Sing
     return Column(
       children: [
         Container(
-          color: Colors.white.withOpacity(0.9), // Barra scorrimento fasi stile vetro
+          color: Colors.white.withOpacity(0.9), 
           child: TabBar(
             controller: _bracketController,
             labelColor: Colors.orange[800],
@@ -342,7 +407,6 @@ class _KnockoutBracketWidgetState extends State<KnockoutBracketWidget> with Sing
           child: TabBarView(
             controller: _bracketController,
             children: [
-              // PAGINA 1: PLAYOFF
               ListView(
                 padding: const EdgeInsets.only(top: 10, bottom: 20),
                 children: [
@@ -355,8 +419,6 @@ class _KnockoutBracketWidgetState extends State<KnockoutBracketWidget> with Sing
                   _buildMatchupCard('Match 3', getTeamPlaceholder('A', 3), getTeamPlaceholder('B', 1)),
                 ],
               ),
-              
-              // PAGINA 2: SEMIFINALI
               ListView(
                 padding: const EdgeInsets.only(top: 10, bottom: 20),
                 children: [
@@ -368,8 +430,6 @@ class _KnockoutBracketWidgetState extends State<KnockoutBracketWidget> with Sing
                   _buildMatchupCard('Semifinale 2', 'Vincente Match 2', 'Vincente Match 3'),
                 ],
               ),
-              
-              // PAGINA 3: FINALI
               ListView(
                 padding: const EdgeInsets.only(top: 10, bottom: 20),
                 children: [
