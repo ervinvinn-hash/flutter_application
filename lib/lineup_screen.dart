@@ -24,12 +24,14 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   final List<String> validFormations = ['3-5-2', '3-4-3', '3-3-4', '4-5-1', '4-4-2', '4-3-3', '4-2-4', '5-4-1', '5-3-2', '5-2-3'];
   String currentFormation = '3-4-3';
   
+  // Manteniamo le liste grafiche per comodità di scorrimento UI
   List<Map<String, dynamic>?> fieldD = [null, null, null];
   List<Map<String, dynamic>?> fieldC = [null, null, null, null];
   List<Map<String, dynamic>?> fieldA = [null, null, null];
   Map<String, dynamic>? fieldP;
   Map<String, dynamic>? fieldCoach;
 
+  // 7 panchinari in ordine fisso
   final List<String> benchRoles = ['P', 'D', 'D', 'C', 'C', 'A', 'A'];
   List<Map<String, dynamic>?> benchPlayers = List.filled(7, null);
 
@@ -52,11 +54,45 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       final rosterData = await client.from('roster_players').select().eq('team_id', widget.teamId);
       final playersData = await client.from('players').select('id, name, role, national_team');
       
-      // 🔥 HOTFIX: Sblocchiamo la formazione forzatamente
-      isLineupLocked = false;
+      // Controllo blocco orario
+      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true);
+      int currentMatchday = 1;
+      final now = DateTime.now();
+      try {
+        var upcomingMatch = matchesData.firstWhere((m) {
+          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
+          return kickoffLocal.add(const Duration(hours: 2)).isAfter(now);
+        });
+        currentMatchday = upcomingMatch['matchday'];
+      } catch (e) {
+        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
+      }
+
+      final currentRoundMatches = matchesData.where((m) => m['matchday'] == currentMatchday).toList();
+      if (currentRoundMatches.isNotEmpty) {
+        List<DateTime> matchDates = currentRoundMatches.map((m) => DateTime.parse(m['kickoff_time']).toLocal()).toList();
+        matchDates.sort(); 
+        DateTime firstMatch = matchDates.first;
+        DateTime lastMatch = matchDates.last;
+        DateTime lockTime = firstMatch.subtract(const Duration(minutes: 15));
+        DateTime unlockTime = lastMatch.add(const Duration(hours: 2));
+        isLineupLocked = now.isAfter(lockTime) && now.isBefore(unlockTime);
+      }
+
+      Map<String, String> teamMatches = {};
+      for (var m in matchesData) {
+        if (m['matchday'] == currentMatchday) {
+          String home = m['home_team'];
+          String away = m['away_team'];
+          String siglaHome = home.length >= 3 ? home.substring(0, 3).toUpperCase() : home.toUpperCase();
+          String siglaAway = away.length >= 3 ? away.substring(0, 3).toUpperCase() : away.toUpperCase();
+          String matchString = '$siglaHome - $siglaAway';
+          teamMatches[home] = matchString;
+          teamMatches[away] = matchString;
+        }
+      }
       
       List<int> rosterIds = rosterData.map<int>((r) => r['player_id'] as int).toList();
-      
       List<dynamic> statsData = [];
       if (rosterIds.isNotEmpty) {
         statsData = await client.from('matchday_stats').select().inFilter('player_id', rosterIds);
@@ -89,19 +125,17 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           fm += (stat['penalty_saved'] ?? 0) * 3.0;
           fm -= (stat['penalty_missed'] ?? 0) * 3.0;
           if (stat['clean_sheet'] == true) fm += 1.0; 
-          
           ag['sum_fm'] += fm;
         }
       }
 
       Map<int, Map<String, dynamic>> playersMap = { for (var p in playersData) p['id']: p };
-
       List<Map<String, dynamic>> loadedRoster = [];
+
       for (var row in rosterData) {
         int pId = row['player_id'];
         if (playersMap.containsKey(pId)) {
           String nTeam = playersMap[pId]!['national_team'] ?? '???';
-          
           var ag = aggregatedStats[pId]!;
           int apps = ag['apps'];
           double mediaVoto = apps > 0 ? ag['sum_mv'] / apps : 0.0;
@@ -115,26 +149,71 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
             'is_starter': row['is_starter'] ?? false,
             'is_bench': row['is_bench'] ?? false,
             'is_captain': row['is_captain'] ?? false,
-            'match': 'N/A', // 🔥 HOTFIX: Partita finta
-            'apps': apps, 
-            'goals': ag['goals'], 
-            'assists': ag['assists'], 
-            'yellows': ag['yellows'], 
-            'reds': ag['reds'], 
-            'mv': mediaVoto, 
-            'fm': fantaMedia,
+            'position_id': row['position_id'], // NUOVO CAMPO FONDAMENTALE
+            'match': teamMatches[nTeam] ?? 'Riposo', 
+            'apps': apps, 'goals': ag['goals'], 'assists': ag['assists'], 
+            'yellows': ag['yellows'], 'reds': ag['reds'], 'mv': mediaVoto, 'fm': fantaMedia,
           });
         }
       }
 
-      List<Map<String, dynamic>> sD = loadedRoster.where((p) => p['is_starter'] && p['role'] == 'D').toList();
-      List<Map<String, dynamic>> sC = loadedRoster.where((p) => p['is_starter'] && p['role'] == 'C').toList();
-      List<Map<String, dynamic>> sA = loadedRoster.where((p) => p['is_starter'] && p['role'] == 'A').toList();
+      // 1. Inizializziamo le liste di raggruppamento per il campo
+      List<Map<String, dynamic>> sD = [];
+      List<Map<String, dynamic>> sC = [];
+      List<Map<String, dynamic>> sA = [];
+      Map<String, dynamic>? sP;
+      Map<String, dynamic>? sCT;
       
+      List<Map<String, dynamic>?> bP = List.filled(7, null);
+      List<String> benchPosIds = ['P2', 'D6', 'D7', 'C6', 'C7', 'A5', 'A6'];
+
+      // 2. Distribuzione basata su position_id (se disponibile) o su vecchi fallback
+      for (var p in loadedRoster) {
+        String? pos = p['position_id'];
+        if (p['is_starter'] == true) {
+           if (pos != null) {
+              if (pos.startsWith('D')) sD.add(p);
+              else if (pos.startsWith('C')) sC.add(p);
+              else if (pos.startsWith('A')) sA.add(p);
+              else if (pos == 'P1') sP = p;
+              else if (pos == 'CT1') sCT = p;
+           } else {
+              // Fallback se vecchi dati non hanno position_id
+              if (p['role'] == 'D') sD.add(p);
+              else if (p['role'] == 'C') sC.add(p);
+              else if (p['role'] == 'A') sA.add(p);
+              else if (p['role'] == 'P') sP = p;
+              else if (p['role'] == 'CT') sCT = p;
+           }
+        } else if (p['is_bench'] == true) {
+           if (pos != null) {
+              int idx = benchPosIds.indexOf(pos);
+              if (idx != -1) bP[idx] = p;
+           }
+        }
+      }
+      
+      // Assicura l'ordine corretto D1, D2, D3 etc.
+      sD.sort((a, b) => (a['position_id'] ?? '').compareTo(b['position_id'] ?? ''));
+      sC.sort((a, b) => (a['position_id'] ?? '').compareTo(b['position_id'] ?? ''));
+      sA.sort((a, b) => (a['position_id'] ?? '').compareTo(b['position_id'] ?? ''));
+
+      // 3. Fallback per la panchina vecchia senza position_id
+      var unassignedBench = loadedRoster.where((p) => p['is_bench'] == true && p['position_id'] == null).toList();
+      for (var p in unassignedBench) {
+         for (int i=0; i<7; i++) {
+            if (bP[i] == null && benchRoles[i] == p['role']) {
+               bP[i] = p;
+               break;
+            }
+         }
+      }
+
+      // 4. Inferenza modulo
       String inferredForm = '${sD.length}-${sC.length}-${sA.length}';
       if (!validFormations.contains(inferredForm)) inferredForm = '3-4-3';
-      
       currentFormation = inferredForm;
+      
       int rD = int.parse(currentFormation[0]);
       int rC = int.parse(currentFormation[2]);
       int rA = int.parse(currentFormation[4]);
@@ -142,16 +221,9 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       fieldD = List.generate(rD, (i) => i < sD.length ? sD[i] : null);
       fieldC = List.generate(rC, (i) => i < sC.length ? sC[i] : null);
       fieldA = List.generate(rA, (i) => i < sA.length ? sA[i] : null);
-      
-      try { fieldP = loadedRoster.firstWhere((p) => p['is_starter'] && p['role'] == 'P'); } catch(e) { fieldP = null; }
-      try { fieldCoach = loadedRoster.firstWhere((p) => p['is_starter'] && p['role'] == 'CT'); } catch(e) { fieldCoach = null; }
-
-      List<Map<String, dynamic>> bP = loadedRoster.where((p) => p['is_bench']).toList();
-      benchPlayers = List.filled(7, null);
-      for (int i = 0; i < 7; i++) {
-        int idx = bP.indexWhere((p) => p['role'] == benchRoles[i] && !benchPlayers.contains(p));
-        if (idx != -1) benchPlayers[i] = bP[idx];
-      }
+      fieldP = sP;
+      fieldCoach = sCT;
+      benchPlayers = bP;
 
       setState(() {
         roster = loadedRoster;
@@ -181,9 +253,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     benchPlayers.forEach(setBench);
 
     for (var p in roster) {
-      if (p['is_captain'] == true && p['is_starter'] == false) {
-        p['is_captain'] = false;
-      }
+      if (p['is_captain'] == true && p['is_starter'] == false) p['is_captain'] = false;
     }
   }
 
@@ -236,13 +306,57 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     
     try {
       final client = Supabase.instance.client;
+      final serverTimeData = await client.rpc('get_server_time').catchError((_) => null);
+      DateTime serverNow = DateTime.now();
+      if (serverTimeData != null) {
+        serverNow = DateTime.parse(serverTimeData.toString()).toLocal();
+      }
 
-      // 🔥 HOTFIX: Rimosso completamente il blocco temporale che faceva crashare l'app in assenza di partite
+      final matchesData = await client.from('world_cup_matches').select().order('kickoff_time', ascending: true); 
+      int currentMatchday = 1;
+      try {
+        var upcomingMatch = matchesData.firstWhere((m) {
+          DateTime kickoffLocal = DateTime.parse(m['kickoff_time']).toLocal();
+          return kickoffLocal.add(const Duration(hours: 2)).isAfter(serverNow);
+        });
+        currentMatchday = upcomingMatch['matchday']; 
+      } catch (e) {
+        if (matchesData.isNotEmpty) currentMatchday = matchesData.last['matchday'];
+      }
+
+      final firstMatchOfRound = matchesData.firstWhere((m) => m['matchday'] == currentMatchday);
+      DateTime deadline = DateTime.parse(firstMatchOfRound['kickoff_time']).toLocal().subtract(const Duration(minutes: 15));
+      if (serverNow.isAfter(deadline)) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('❌ INVIO BLOCCATO! Scaduto il tempo limite per la $currentMatchdayª Giornata.', style: const TextStyle(fontWeight: FontWeight.bold)),
+          backgroundColor: Colors.red[900], duration: const Duration(seconds: 5),
+        ));
+        setState(() { isSaving = false; isLineupLocked = true; });
+        return;
+      }
+
+      // Mappatura ferrea del position_id
+      for (var p in roster) {
+        p['position_id'] = null; // reset
+      }
+
+      void markPos(Map<String, dynamic>? p, String posId) {
+        if (p != null) p['position_id'] = posId;
+      }
+
+      for (int i=0; i<fieldD.length; i++) markPos(fieldD[i], 'D${i+1}');
+      for (int i=0; i<fieldC.length; i++) markPos(fieldC[i], 'C${i+1}');
+      for (int i=0; i<fieldA.length; i++) markPos(fieldA[i], 'A${i+1}');
+      markPos(fieldP, 'P1');
+      markPos(fieldCoach, 'CT1');
+      
+      List<String> benchPosIds = ['P2', 'D6', 'D7', 'C6', 'C7', 'A5', 'A6'];
+      for (int i=0; i<7; i++) markPos(benchPlayers[i], benchPosIds[i]);
 
       for (var p in roster) {
         int bOrder = 99;
         if (p['is_bench'] == true) {
-          bOrder = benchPlayers.indexWhere((bp) => bp != null && bp['player_id'] == p['player_id']) + 1;
+          bOrder = benchPosIds.indexOf(p['position_id'] ?? '') + 1;
         }
 
         await client.from('roster_players').update({
@@ -250,6 +364,7 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
           'is_bench': p['is_bench'],
           'is_captain': p['is_captain'] ?? false,
           'bench_order': bOrder,
+          'position_id': p['position_id'], // SALVATAGGIO DEI NUOVI SLOT
         }).eq('team_id', widget.teamId).eq('player_id', p['player_id']);
       }
       
@@ -262,10 +377,45 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
     }
   }
 
+  // --- NUOVA FUNZIONE PER IL TASTO ELIMINA TUTTO ---
+  void _clearAllLineup() {
+    if (isLineupLocked) return;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Svuota Formazione'),
+        content: const Text('Sei sicuro di voler rimuovere dal campo tutti i titolari e la panchina?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Annulla')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red[800], foregroundColor: Colors.white),
+            onPressed: () {
+              Navigator.pop(ctx);
+              setState(() {
+                fieldD = List.filled(fieldD.length, null);
+                fieldC = List.filled(fieldC.length, null);
+                fieldA = List.filled(fieldA.length, null);
+                fieldP = null;
+                fieldCoach = null;
+                benchPlayers = List.filled(7, null);
+                for (var p in roster) {
+                  p['is_starter'] = false;
+                  p['is_bench'] = false;
+                  p['is_captain'] = false;
+                  p['position_id'] = null;
+                }
+              });
+            },
+            child: const Text('Svuota tutto'),
+          )
+        ]
+      )
+    );
+  }
+
   String _getCountrySigla(String country) {
     if (country.isEmpty || country == '???') return '???';
     final String cleanCountry = country.trim().toLowerCase();
-
     if (cleanCountry.contains('usa') || cleanCountry.contains('stati uniti')) return 'USA';
     if (cleanCountry.contains('avorio')) return 'CIV';
 
@@ -292,7 +442,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   void _copyLineupToClipboard() {
     _syncRosterState(); 
     StringBuffer sb = StringBuffer();
-    
     sb.writeln(widget.teamName); 
     sb.writeln('Allenatore:'); 
     
@@ -318,7 +467,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         sb.writeln('${p['role']} - ${p['name']} (${_getCountrySigla(p['national_team'])})');
       }
     }
-
     Clipboard.setData(ClipboardData(text: sb.toString())); 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Formazione copiata negli appunti! 📋'), backgroundColor: Colors.orange[800])); 
   }
@@ -337,10 +485,8 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
   String _getFlagOnly(String country) {
     if (country.isEmpty || country == '???') return '🏳️';
     final String cleanCountry = country.trim().toLowerCase().replaceAll('’', '\'').replaceAll('`', '\''); 
-
     if (cleanCountry.contains('usa') || cleanCountry.contains('stati uniti')) return '🇺🇸';
     if (cleanCountry.contains('avorio')) return '🇨🇮';
-
     final Map<String, String> flags = {
       'algeria': '🇩🇿', 'arabia saudita': '🇸🇦', 'argentina': '🇦🇷', 'australia': '🇦🇺',
       'austria': '🇦🇹', 'belgio': '🇧🇪', 'bosnia e herzegovina': '🇧🇦', 'bosnia': '🇧🇦',
@@ -356,7 +502,6 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       'spagna': '🇪🇸', 'sud africa': '🇿🇦', 'svezia': '🇸🇪', 'svizzera': '🇨🇭', 
       'tunisia': '🇹🇳', 'turchia': '🇹🇷', 'uruguay': '🇺🇾', 'uzbekistan': '🇺🇿',
     };
-
     return flags[cleanCountry] ?? '🏳️';
   }
 
@@ -552,8 +697,44 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
                         const SizedBox(height: 30), 
                         Row(
                           children: [
-                            Expanded(child: Container()),
+                            // IL NUOVO BOTTONE SVUOTA, SPECULARE ALL'ALLENATORE
+                            Expanded(
+                              child: Align(
+                                alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: const EdgeInsets.only(left: 40.0),
+                                  child: GestureDetector(
+                                    onTap: _clearAllLineup,
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          width: 44, height: 44,
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: Colors.red[800]!, width: 2.5),
+                                            boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 4, offset: const Offset(0, 2))],
+                                          ),
+                                          child: const Center(child: Icon(Icons.close, color: Colors.red, size: 24)),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white.withValues(alpha: 0.95), 
+                                            borderRadius: BorderRadius.circular(6), 
+                                          ),
+                                          child: const Text('SVUOTA', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red)),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            
                             _buildSlot('P', fieldP, (p) => fieldP = p),
+                            
                             Expanded(
                               child: Align(
                                 alignment: Alignment.centerRight,

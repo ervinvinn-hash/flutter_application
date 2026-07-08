@@ -14,6 +14,8 @@ import 'admin_groups_screen.dart';
 import 'admin_trades_screen.dart';
 import 'trade_center_screen.dart';
 import 'Giornate_screen.dart';
+import 'admin_knockout_screen.dart';
+import 'admin_real_matches_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -336,6 +338,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showAdminPanel(BuildContext context) {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true, // <-- Aggiunto per evitare problemi con schermi piccoli
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (BuildContext ctx) {
         return SafeArea(
@@ -353,6 +356,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const Text('Pannello di Controllo', textAlign: TextAlign.center, style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.red)),
                 const SizedBox(height: 20),
                 _adminMenuButton(ctx, Icons.admin_panel_settings, 'Gestione Voti', const AdminVotesScreen()),
+                const SizedBox(height: 10),
+                _adminMenuButton(ctx, Icons.public, 'Partite Mondiale Reale', const AdminRealMatchesScreen()), 
+                const SizedBox(height: 10),
+                _adminMenuButton(ctx, Icons.emoji_events, 'Gestione Fasi Finali', const AdminKnockoutScreen()), // <--- NUOVO TASTO QUI!
                 const SizedBox(height: 10),
                 _adminMenuButton(ctx, Icons.schema, 'Assegnazione Gironi', const AdminGroupsScreen()),
                 const SizedBox(height: 10),

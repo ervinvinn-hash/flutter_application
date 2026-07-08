@@ -1,23 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:shared_preferences/shared_preferences.dart'; // Aggiunto per leggere chi è l'Admin
+import 'package:shared_preferences/shared_preferences.dart'; 
 import 'calculator_service.dart'; 
-import 'tabellino_screen.dart'; // <-- IMPORTIAMO IL NUOVO TABELLINO!
+import 'tabellino_screen.dart'; 
 
+// --- MODELLO DATI ---
 class MatchModel {
   final int id;
   final String homeTeamId;
   final String awayTeamId;
   final String homeTeamName;
   final String awayTeamName;
-  int? homeGoals;
-  int? awayGoals;
+  num? homeGoals;
+  num? awayGoals;
   final String phase;
   final int matchDay;
 
   MatchModel(this.id, this.homeTeamId, this.awayTeamId, this.homeTeamName, this.awayTeamName, this.homeGoals, this.awayGoals, this.phase, this.matchDay);
 }
 
+// --- CLASSE AUSILIARIA PER RAGGRUPPARE LE SFIDE A/R ---
+class CalendarMatchup {
+  final String team1Id;
+  final String team2Id;
+  final String phaseName;
+  final MatchModel andata;
+  final MatchModel? ritorno;
+
+  CalendarMatchup(this.team1Id, this.team2Id, this.phaseName, this.andata, this.ritorno);
+
+  num? get andataT1 => andata.homeTeamId == team1Id ? andata.homeGoals : andata.awayGoals;
+  num? get andataT2 => andata.awayTeamId == team2Id ? andata.awayGoals : andata.homeGoals;
+  
+  num? get ritornoT1 => ritorno != null ? (ritorno!.homeTeamId == team1Id ? ritorno!.homeGoals : ritorno!.awayGoals) : null;
+  num? get ritornoT2 => ritorno != null ? (ritorno!.awayTeamId == team2Id ? ritorno!.awayGoals : ritorno!.homeGoals) : null;
+
+  bool get hasAnyScore => andataT1 != null || andataT2 != null || ritornoT1 != null || ritornoT2 != null;
+  num get totalT1 => (andataT1 ?? 0) + (ritornoT1 ?? 0);
+  num get totalT2 => (andataT2 ?? 0) + (ritornoT2 ?? 0);
+}
+
+String formatScore(num? score) {
+  if (score == null) return '-';
+  if (score == score.toInt()) return score.toInt().toString();
+  return score.toString();
+}
+
+// --- SCHERMATA PRINCIPALE ---
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
 
@@ -26,10 +55,12 @@ class CalendarScreen extends StatefulWidget {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  List<MatchModel> matches = [];
+  List<MatchModel> allMatches = [];
   bool isLoading = true;
   bool isCalculating = false;
-  bool isAdmin = false; // Variabile per nascondere i poteri speciali
+  bool isAdmin = false; 
+  
+  int selectedGroupMatchday = 1;
 
   @override
   void initState() {
@@ -38,15 +69,17 @@ class _CalendarScreenState extends State<CalendarScreen> {
     _fetchMatches();
   }
 
-  // Controlla se l'utente loggato è l'Admin
   Future<void> _checkAdminStatus() async {
     final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      isAdmin = prefs.getBool('isAdmin') ?? false;
-    });
+    if (mounted) {
+      setState(() {
+        isAdmin = prefs.getBool('isAdmin') ?? false;
+      });
+    }
   }
 
   Future<void> _fetchMatches() async {
+    setState(() => isLoading = true);
     try {
       final teamsData = await Supabase.instance.client.from('fantasy_teams').select('id, team_name');
       Map<String, String> teamNames = {};
@@ -63,15 +96,15 @@ class _CalendarScreenState extends State<CalendarScreen> {
           json['away_team_id'],
           teamNames[json['home_team_id']] ?? 'Squadra Sconosciuta',
           teamNames[json['away_team_id']] ?? 'Squadra Sconosciuta',
-          json['home_goals'],
-          json['away_goals'],
-          json['phase'],
+          json['home_goals'] as num?,
+          json['away_goals'] as num?,
+          json['phase'] ?? 'Girone',
           json['match_day'],
         );
       }).toList();
 
       setState(() {
-        matches = loadedMatches;
+        allMatches = loadedMatches;
         isLoading = false;
       });
     } catch (e) {
@@ -89,7 +122,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           .not('home_goals', 'is', null)
           .ilike('phase', '%Girone%'); 
 
-      Map<String, Map<String, int>> stats = {};
+      Map<String, Map<String, num>> stats = {};
       for(var t in teams) {
          stats[t['id']] = {'pts': 0, 'played': 0, 'gf': 0, 'ga': 0};
       }
@@ -97,8 +130,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
       for (var m in playedMatches) {
         String home = m['home_team_id'];
         String away = m['away_team_id'];
-        int hg = m['home_goals'];
-        int ag = m['away_goals'];
+        num hg = m['home_goals'];
+        num ag = m['away_goals'];
 
         if(stats.containsKey(home)) {
           stats[home]!['played'] = stats[home]!['played']! + 1;
@@ -134,7 +167,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  // POPUP MANUALE (Solo Admin)
   void _showScoreDialog(MatchModel match) {
     final homeController = TextEditingController(text: match.homeGoals?.toString() ?? '');
     final awayController = TextEditingController(text: match.awayGoals?.toString() ?? '');
@@ -153,7 +185,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Text(match.homeTeamName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    TextField(controller: homeController, keyboardType: TextInputType.number, textAlign: TextAlign.center, decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.orange[800]!), borderRadius: BorderRadius.circular(12)))),
+                    TextField(controller: homeController, keyboardType: const TextInputType.numberWithOptions(decimal: true), textAlign: TextAlign.center, decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.orange[800]!), borderRadius: BorderRadius.circular(12)))),
                   ],
                 ),
               ),
@@ -164,7 +196,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   children: [
                     Text(match.awayTeamName, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
-                    TextField(controller: awayController, keyboardType: TextInputType.number, textAlign: TextAlign.center, decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.orange[800]!), borderRadius: BorderRadius.circular(12)))),
+                    TextField(controller: awayController, keyboardType: const TextInputType.numberWithOptions(decimal: true), textAlign: TextAlign.center, decoration: InputDecoration(border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)), focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.orange[800]!), borderRadius: BorderRadius.circular(12)))),
                   ],
                 ),
               ),
@@ -175,8 +207,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: Colors.orange[800], foregroundColor: Colors.white),
               onPressed: () async {
-                int? homeG = int.tryParse(homeController.text);
-                int? awayG = int.tryParse(awayController.text);
+                num? homeG = num.tryParse(homeController.text);
+                num? awayG = num.tryParse(awayController.text);
                 if (homeG != null && awayG != null) {
                   Navigator.pop(context);
                   await _saveResult(match, homeG, awayG);
@@ -190,7 +222,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
     );
   }
 
-  Future<void> _saveResult(MatchModel match, int homeG, int awayG) async {
+  Future<void> _saveResult(MatchModel match, num homeG, num awayG) async {
     try {
       await Supabase.instance.client.from('matches').update({
         'home_goals': homeG,
@@ -283,7 +315,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
         playerRoles[p['id']] = p['role'];
       }
 
-      final dayMatches = matches.where((m) => m.matchDay == matchDay).toList();
+      final dayMatches = allMatches.where((m) => m.matchDay == matchDay).toList();
 
       for (var match in dayMatches) {
         double homeScore = await _getTeamScore(match.homeTeamId, dayStats, playerRoles, calcService);
@@ -366,246 +398,267 @@ class _CalendarScreenState extends State<CalendarScreen> {
     return await calc.calculateTeamScore(roster, coach, captain);
   }
 
-  // --- UI METODI PER I RIQUADRI ---
+  // --- LOGICA RAGGRUPPAMENTO KNOCKOUT ---
+  List<CalendarMatchup> _getGroupedKnockouts(List<MatchModel> matches) {
+    Map<String, List<MatchModel>> grouped = {};
+    for (var m in matches) {
+      List<String> ids = [m.homeTeamId, m.awayTeamId];
+      ids.sort();
+      int phaseKey = m.matchDay <= 5 ? 1 : (m.matchDay <= 7 ? 2 : 3);
+      String key = '${ids[0]}_${ids[1]}_$phaseKey';
+      grouped.putIfAbsent(key, () => []).add(m);
+    }
+    
+    List<CalendarMatchup> result = [];
+    for (var list in grouped.values) {
+      list.sort((a, b) => a.matchDay.compareTo(b.matchDay));
+      var andata = list[0];
+      var ritorno = list.length > 1 ? list[1] : null;
+      String cleanPhase = andata.phase.replaceAll(RegExp(r'\s*\(.*?\)'), '').trim();
+      
+      result.add(CalendarMatchup(andata.homeTeamId, andata.awayTeamId, cleanPhase, andata, ritorno));
+    }
+    return result;
+  }
 
-  Widget _buildMatchCard(MatchModel match) {
-    final isPlayed = match.homeGoals != null && match.awayGoals != null;
+  // --- WIDGET RIGA CLICCABILE PER APRIRE IL TABELLINO ---
+  Widget _buildClickableMatchRow(String label, MatchModel match) {
+    return InkWell(
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => TabellinoScreen(
+            matchDay: match.matchDay,
+            team1Id: match.homeTeamId,
+            team2Id: match.awayTeamId,
+            team1Name: match.homeTeamName,
+            team2Name: match.awayTeamName,
+            score1: match.homeGoals ?? 0,
+            score2: match.awayGoals ?? 0,
+          ),
+        ),
+      ).then((_) => _fetchMatches()),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 16),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(4)),
+              child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black54)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(child: Text(match.homeTeamName, style: const TextStyle(fontSize: 14, color: Colors.black87))),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(6), border: Border.all(color: Colors.grey[300]!)),
+              child: Text('${formatScore(match.homeGoals)} - ${formatScore(match.awayGoals)}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black87)),
+            ),
+            Expanded(child: Text(match.awayTeamName, textAlign: TextAlign.right, style: const TextStyle(fontSize: 14, color: Colors.black87))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKnockoutMatchupCard(CalendarMatchup matchup) {
+    // CORREZIONE BUG NOMI SQUADRE FASI FINALI:
+    // Estraiamo il nome esatto direttamente dalla partita di andata del playoff
+    // invece di cercarlo globalmente (evitando così di pescare i nomi degli avversari dei gironi).
+    String t1Name = matchup.andata.homeTeamId == matchup.team1Id 
+        ? matchup.andata.homeTeamName 
+        : matchup.andata.awayTeamName;
+        
+    String t2Name = matchup.andata.homeTeamId == matchup.team2Id 
+        ? matchup.andata.homeTeamName 
+        : matchup.andata.awayTeamName;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
       elevation: 4,
-      color: Colors.white.withValues(alpha: 0.95),
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Expanded(child: Text(match.homeTeamName, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87))),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16.0),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isPlayed ? Colors.orange[800] : Colors.grey[300]?.withValues(alpha: 0.5),
-                  borderRadius: BorderRadius.circular(12),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 6),
+            decoration: BoxDecoration(color: Colors.orange[800], borderRadius: const BorderRadius.vertical(top: Radius.circular(16))),
+            child: Text(matchup.phaseName.toUpperCase(), textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1)),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(child: Text(t1Name, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                  decoration: BoxDecoration(color: Colors.orange[50], borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.orange[200]!)),
+                  child: Text(
+                    matchup.hasAnyScore ? '${formatScore(matchup.totalT1)} - ${formatScore(matchup.totalT2)}' : ' TOT ',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.orange[900]),
+                  ),
                 ),
-                child: Text(
-                  isPlayed ? '${match.homeGoals} - ${match.awayGoals}' : ' VS ',
-                  style: TextStyle(color: isPlayed ? Colors.white : Colors.black54, fontWeight: FontWeight.bold, fontSize: 18),
-                ),
-              ),
+                Expanded(child: Text(t2Name, textAlign: TextAlign.center, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15))),
+              ],
             ),
-            Expanded(child: Text(match.awayTeamName, textAlign: TextAlign.left, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.black87))),
+          ),
+          const Divider(height: 10),
+          _buildClickableMatchRow('ANDATA (G${matchup.andata.matchDay})', matchup.andata),
+          if (matchup.ritorno != null) ...[
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            _buildClickableMatchRow('RITORNO (G${matchup.ritorno!.matchDay})', matchup.ritorno!),
           ],
-        ),
-        
-        // --- LA NUOVA LOGICA TAP (APRE SEMPRE IL TABELLINO) ---
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => TabellinoScreen(
-                matchDay: match.matchDay,
-                team1Id: match.homeTeamId,
-                team2Id: match.awayTeamId,
-                team1Name: match.homeTeamName,
-                team2Name: match.awayTeamName,
-                score1: match.homeGoals ?? 0, // Se non è giocata, mostra 0
-                score2: match.awayGoals ?? 0, // Se non è giocata, mostra 0
-              ),
-            ),
-          );
-        },
-        onLongPress: () {
-          // Solo l'Admin può forzare un risultato a tavolino
-          if (isAdmin) {
-            _showScoreDialog(match);
-          }
-        },
+          const SizedBox(height: 6),
+        ],
       ),
     );
   }
 
-  Widget _buildDaySection(int day, List<MatchModel> allMatches) {
-    final dayMatches = allMatches.where((m) => m.matchDay == day).toList();
-    if (dayMatches.isEmpty) return const SizedBox.shrink();
-
-    final matchesA = dayMatches.where((m) => m.phase.toUpperCase().contains('A')).toList();
-    final matchesB = dayMatches.where((m) => m.phase.toUpperCase().contains('B')).toList();
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24.0, left: 12, right: 12),
-      child: Card(
-        elevation: 8,
-        color: Colors.white.withValues(alpha: 0.85),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.orange[700]!, Colors.orange[900]!])),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                '$dayª GIORNATA',
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5),
-              ),
-            ),
-            
-            if (matchesA.isNotEmpty) ...[
-              Container(
-                color: Colors.black12,
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: const Text('GIRONE A', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.2)),
-              ),
-              const SizedBox(height: 8),
-              ...matchesA.map((m) => _buildMatchCard(m)),
-              const SizedBox(height: 12),
-            ],
-
-            if (matchesB.isNotEmpty) ...[
-              Container(
-                color: Colors.black12,
-                padding: const EdgeInsets.symmetric(vertical: 6),
-                child: const Text('GIRONE B', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: 1.2)),
-              ),
-              const SizedBox(height: 8),
-              ...matchesB.map((m) => _buildMatchCard(m)),
-              const SizedBox(height: 12),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildKnockoutSection(int day, List<MatchModel> allMatches) {
-    final dayMatches = allMatches.where((m) => m.matchDay == day).toList();
-    if (dayMatches.isEmpty) return const SizedBox.shrink();
-
-    String phaseName = dayMatches.first.phase;
-
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 24.0, left: 12, right: 12),
-      child: Card(
-        elevation: 8,
-        color: Colors.white.withValues(alpha: 0.85),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.red[700]!, Colors.red[900]!])),
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              child: Text(
-                phaseName.toUpperCase(),
-                textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold, letterSpacing: 1.5),
-              ),
-            ),
-            const SizedBox(height: 8),
-            ...dayMatches.map((m) => _buildMatchCard(m)),
-            const SizedBox(height: 12),
-          ],
-        ),
-      ),
+  Widget _buildKnockoutTabList(List<CalendarMatchup> list, String emptyMsg) {
+    if (list.isEmpty) {
+      return Center(child: Padding(padding: const EdgeInsets.all(24.0), child: Text(emptyMsg, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70, fontStyle: FontStyle.italic, fontSize: 15))));
+    }
+    return ListView.builder(
+      padding: const EdgeInsets.only(top: 10, bottom: 80),
+      itemCount: list.length,
+      itemBuilder: (context, index) => _buildKnockoutMatchupCard(list[index]),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final groupMatches = matches.where((m) => m.matchDay <= 3).toList();
-    final knockoutMatches = matches.where((m) => m.matchDay > 3).toList();
-    final knockoutDays = knockoutMatches.map((m) => m.matchDay).toSet().toList()..sort();
+    final groupMatches = allMatches.where((m) => m.matchDay <= 3 && m.matchDay == selectedGroupMatchday).toList();
+    final allKnockouts = allMatches.where((m) => m.matchDay >= 4).toList();
+    final groupedKnockouts = _getGroupedKnockouts(allKnockouts);
+
+    final playoffs = groupedKnockouts.where((m) => m.andata.matchDay == 4 || m.andata.matchDay == 5).toList();
+    final semis = groupedKnockouts.where((m) => m.andata.matchDay == 6 || m.andata.matchDay == 7).toList();
+    final finals = groupedKnockouts.where((m) => m.andata.matchDay >= 8).toList();
 
     return Container(
-      decoration: BoxDecoration(
-        image: DecorationImage(
-          image: const AssetImage('assets/sfondo.png'), 
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.darken),
-        ),
-      ),
+      decoration: const BoxDecoration(image: DecorationImage(image: AssetImage('assets/sfondo.png'), fit: BoxFit.cover)),
       child: DefaultTabController(
         length: 2,
         child: Scaffold(
           backgroundColor: Colors.transparent,
           appBar: AppBar(
-            title: const Text('Calendario e Risultati', style: TextStyle(color: Color.fromRGBO(0, 0, 0, 1), fontWeight: FontWeight.bold)),
+            title: const Text('Calendario Competizione', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
             backgroundColor: Colors.white.withOpacity(0.8),
             elevation: 0,
-            iconTheme: const IconThemeData(color: Color.fromRGBO(0, 0, 0, 1)),
+            actions: [IconButton(icon: const Icon(Icons.refresh, color: Colors.black87), onPressed: _fetchMatches)],
             bottom: TabBar(
-              labelColor: Colors.black,
-              unselectedLabelColor: Colors.black54,
-              indicatorColor: Colors.orange[800], 
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-              tabs: const [
-                Tab(text: 'GIRONI (1-3)'),
-                Tab(text: 'FASI FINALI'),
-              ],
+              labelColor: Colors.black, unselectedLabelColor: Colors.black54, indicatorColor: Colors.orange[800],
+              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+              tabs: const [Tab(text: 'GIRONI'), Tab(text: 'FASI FINALI')],
             ),
           ),
-          body: isLoading || isCalculating
-            ? Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const CircularProgressIndicator(color: Colors.orange),
-                    const SizedBox(height: 16),
-                    Text(
-                      isCalculating ? 'Calcolo in corso...' : 'Caricamento...',
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              )
-            : TabBarView(
-                children: [
-                  groupMatches.isEmpty 
-                    ? const Center(child: Text('Nessuna partita in calendario.', style: TextStyle(color: Colors.white70)))
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(top: 16, bottom: 80),
-                        itemCount: 3, 
-                        itemBuilder: (context, index) {
-                          return _buildDaySection(index + 1, groupMatches);
-                        },
-                      ),
-                      
-                  knockoutMatches.isEmpty
-                    ? Center(
-                        child: Container(
-                          padding: const EdgeInsets.all(24),
-                          margin: const EdgeInsets.symmetric(horizontal: 24),
-                          decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(16)),
-                          child: const Text(
-                            'Le fasi a eliminazione diretta verranno sbloccate al termine dei gironi.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.black87, fontSize: 16, fontWeight: FontWeight.bold),
+          body: isCalculating
+              ? const Center(child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [CircularProgressIndicator(color: Colors.orange), SizedBox(height: 16), Text('Calcolo in corso...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]))
+              : isLoading
+                  ? const Center(child: CircularProgressIndicator(color: Colors.orange))
+                  : TabBarView(
+                      children: [
+                        // --- GIRONI ---
+                        Column(
+                          children: [
+                            Container(
+                              margin: const EdgeInsets.fromLTRB(16, 12, 16, 4), padding: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(color: Colors.white.withOpacity(0.9), borderRadius: BorderRadius.circular(12)),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  const Text('Seleziona Giornata:', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.black87)),
+                                  DropdownButton<int>(
+                                    value: selectedGroupMatchday, underline: Container(),
+                                    style: TextStyle(color: Colors.orange[900], fontWeight: FontWeight.bold, fontSize: 16),
+                                    items: [1, 2, 3].map((val) => DropdownMenuItem(value: val, child: Text('Giornata $val'))).toList(),
+                                    onChanged: (v) { if (v != null) setState(() => selectedGroupMatchday = v); },
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: groupMatches.isEmpty
+                                  ? const Center(child: Text('Nessun match configurato.', style: TextStyle(color: Colors.white70)))
+                                  : ListView.builder(
+                                      padding: const EdgeInsets.only(bottom: 80, top: 6),
+                                      itemCount: groupMatches.length,
+                                      itemBuilder: (context, index) {
+                                        final m = groupMatches[index];
+                                        return Card(
+                                          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                          child: ListTile(
+                                            onTap: () {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => TabellinoScreen(
+                                                    matchDay: m.matchDay,
+                                                    team1Id: m.homeTeamId,
+                                                    team2Id: m.awayTeamId,
+                                                    team1Name: m.homeTeamName,
+                                                    team2Name: m.awayTeamName,
+                                                    score1: m.homeGoals ?? 0,
+                                                    score2: m.awayGoals ?? 0,
+                                                  ),
+                                                ),
+                                              ).then((_) => _fetchMatches());
+                                            },
+                                            onLongPress: () { if (isAdmin) _showScoreDialog(m); },
+                                            title: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Expanded(child: Text(m.homeTeamName, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                                Container(
+                                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                                                  decoration: BoxDecoration(color: Colors.grey[200], borderRadius: BorderRadius.circular(8)),
+                                                  child: Text('${formatScore(m.homeGoals)} - ${formatScore(m.awayGoals)}', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                ),
+                                                Expanded(child: Text(m.awayTeamName, textAlign: TextAlign.right, style: const TextStyle(fontWeight: FontWeight.w600))),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                            ),
+                          ],
+                        ),
+                        // --- FASI FINALI ---
+                        DefaultTabController(
+                          length: 3,
+                          child: Column(
+                            children: [
+                              Container(
+                                color: Colors.white.withOpacity(0.85),
+                                child: TabBar(
+                                  labelColor: Colors.orange[800], unselectedLabelColor: Colors.black54, indicatorColor: Colors.orange[800],
+                                  labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                                  tabs: const [Tab(text: '1. PLAYOFF (G4-5)'), Tab(text: '2. SEMIFINALI (G6-7)'), Tab(text: '3. FINALI (G8)')],
+                                ),
+                              ),
+                              Expanded(
+                                child: TabBarView(
+                                  children: [
+                                    _buildKnockoutTabList(playoffs, 'Nessun match di Playoff inserito.\nGenerali dalla schermata Classifica.'),
+                                    _buildKnockoutTabList(semis, 'Le Semifinali non sono ancora state create.'),
+                                    _buildKnockoutTabList(finals, 'Le Finali non sono ancora state create.'),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.only(top: 16, bottom: 80),
-                        itemCount: knockoutDays.length, 
-                        itemBuilder: (context, index) {
-                          return _buildKnockoutSection(knockoutDays[index], knockoutMatches);
-                        },
-                      ),
-                ],
-              ),
-          floatingActionButton: isAdmin 
-            ? FloatingActionButton.extended(
-                onPressed: _showCalculateDialog,
-                backgroundColor: Colors.orange[800],
-                foregroundColor: Colors.white,
-                icon: const Icon(Icons.calculate),
-                label: const Text('Calcola Giornata', style: TextStyle(fontWeight: FontWeight.bold)),
-              )
-            : null,
+                      ],
+                    ),
+          floatingActionButton: isAdmin && !isLoading
+              ? FloatingActionButton.extended(
+                  onPressed: _showCalculateDialog, backgroundColor: Colors.orange[800], foregroundColor: Colors.white,
+                  icon: const Icon(Icons.calculate), label: const Text('Calcola Giornata', style: TextStyle(fontWeight: FontWeight.bold)),
+                )
+              : null,
         ),
       ),
     );

@@ -7,8 +7,8 @@ class TabellinoScreen extends StatefulWidget {
   final String team2Id;
   final String team1Name;
   final String team2Name;
-  final int score1;
-  final int score2;
+  final num score1; 
+  final num score2; 
 
   const TabellinoScreen({
     super.key,
@@ -47,7 +47,12 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     _fetchTabellinoData();
   }
 
-  // --- MOTORE DI SIMULAZIONE SOSTITUZIONI PER LA GRAFICA ---
+  // Corretto il nome rimuovendo il trattino basso
+  String formatScore(num score) {
+    if (score == score.toInt()) return score.toInt().toString();
+    return score.toString();
+  }
+
   void _simulateSubs(List<Map<String, dynamic>> starters, List<Map<String, dynamic>> bench) {
     for (var p in starters) p['status'] = 'playing';
     for (var p in bench) p['status'] = 'unused';
@@ -85,17 +90,16 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
       Map<int, Map<String, dynamic>> pMap = { for (var p in playersData) p['id']: p };
       playerStats = { for (var s in statsData) s['player_id']: s };
 
-      // 1. Tenta di scaricare la formazione "congelata" per la giornata richiesta
       var roster1 = await Supabase.instance.client.from('storici_formazioni').select().eq('team_id', widget.team1Id).eq('match_day', widget.matchDay);
       var roster2 = await Supabase.instance.client.from('storici_formazioni').select().eq('team_id', widget.team2Id).eq('match_day', widget.matchDay);
 
-      // 2. Se la formazione storica è vuota (es. è la giornata in corso e il timer non è scaduto), usa la formazione live
       if (roster1.isEmpty) {
         roster1 = await Supabase.instance.client.from('roster_players').select().eq('team_id', widget.team1Id);
       }
       if (roster2.isEmpty) {
         roster2 = await Supabase.instance.client.from('roster_players').select().eq('team_id', widget.team2Id);
       }
+      
       List<Map<String, dynamic>> mapRoster(List<dynamic> rosterRows) {
         List<Map<String, dynamic>> list = [];
         for (var row in rosterRows) {
@@ -141,13 +145,11 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
         _simulateSubs(t1Starters, t1Bench);
         _simulateSubs(t2Starters, t2Bench);
 
-        // --- FUNZIONE DI AIUTO PER GOL DALLA PANCHINA ---
         int getBenchGoals(int pId) {
           if (!playerStats.containsKey(pId)) return 0;
           return playerStats[pId]!['goals_scored'] ?? 0;
         }
 
-        // 2. Calcola i totali in tempo reale (Aggiunto calcolo gol panchinari inutilizzati)
         t1Total = 0.0;
         t2Total = 0.0;
         
@@ -159,7 +161,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
           if(p['status'] == 'subbed_in') {
             t1Total += _calculatePlayerPerformance(p['player_id'], p['role'], false)['fantavoto_num'];
           } else if (p['status'] == 'unused') {
-            t1Total += getBenchGoals(p['player_id']) * 1.0; // +1 per ogni gol dalla panchina
+            t1Total += getBenchGoals(p['player_id']) * 1.0; 
           }
         }
 
@@ -171,7 +173,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
           if(p['status'] == 'subbed_in') {
             t2Total += _calculatePlayerPerformance(p['player_id'], p['role'], false)['fantavoto_num'];
           } else if (p['status'] == 'unused') {
-            t2Total += getBenchGoals(p['player_id']) * 1.0; // +1 per ogni gol dalla panchina
+            t2Total += getBenchGoals(p['player_id']) * 1.0; 
           }
         }
         
@@ -284,7 +286,6 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     );
   }
 
-  // --- GRAFICA EMOJI E BADGE INTEGRATA NEI LATI PER EVITARE DISALLINEAMENTI ---
   Widget _buildPlayerSide(Map<String, dynamic>? player, bool isLeft) {
     if (player == null) return const Expanded(child: SizedBox.shrink());
 
@@ -305,7 +306,6 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     var perf = _calculatePlayerPerformance(player['player_id'], player['role'], isCaptain);
     String emojis = perf['emojis'];
 
-    // Box Nome Giocatore + Ruolo
     List<Widget> playerInfo = [
       CircleAvatar(radius: 12, backgroundColor: _getRoleColor(player['role']), child: Text(player['role'], style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold))),
       const SizedBox(width: 8),
@@ -321,7 +321,6 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
       ),
     ];
 
-    // Box Emoji e Capitano (Spinti verso il centro ma appartenenti alle espansioni laterali)
     Widget addons = Row(
       mainAxisSize: MainAxisSize.min,
       children: isLeft 
@@ -350,7 +349,6 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     );
   }
 
-  // --- CENTRO PERFETTAMENTE ALLINEATO CON LARGHEZZA FISSA ---
   Widget _buildCenterGrades(Map<String, dynamic>? p1, Map<String, dynamic>? p2) {
     bool isCaptain1 = p1 != null && (p1['is_captain'] ?? false);
     bool isCaptain2 = p2 != null && (p2['is_captain'] ?? false);
@@ -360,7 +358,7 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
 
     Widget gradeBox(String base, String fv, bool isLeft) {
       return Container(
-        width: 35, // Larghezza fissa che impedisce slittamenti
+        width: 35, 
         decoration: BoxDecoration(
           color: Colors.white,
           border: Border.all(color: Colors.grey[300]!),
@@ -393,83 +391,106 @@ class _TabellinoScreenState extends State<TabellinoScreen> {
     );
   }
 
+  // Sostituita la vecchia funzione fallata e rinominata per mantenere la coerenza
   Widget _buildMatchRow(Map<String, dynamic>? p1, Map<String, dynamic>? p2) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.85),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 4)],
-      ),
-      child: Row(
-        children: [
-          _buildPlayerSide(p1, true),
-          _buildCenterGrades(p1, p2),
-          _buildPlayerSide(p2, false),
-        ],
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      elevation: 4,
+      color: Colors.white.withValues(alpha: 0.95),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        child: Row(
+          children: [
+            Expanded(child: _buildPlayerHalf(p1, isLeft: true)),
+            _buildCenterGrades(p1, p2),
+            Expanded(child: _buildPlayerHalf(p2, isLeft: false)),
+          ],
+        ),
       ),
     );
+  }
+  
+  Widget _buildPlayerHalf(Map<String, dynamic>? player, {required bool isLeft}) {
+    if (player == null) return const SizedBox.shrink();
+    return _buildPlayerSide(player, isLeft);
   }
 
   @override
   Widget build(BuildContext context) {
-    int maxStarters = [t1Starters.length, t2Starters.length].reduce((a, b) => a > b ? a : b);
-    int maxBench = [t1Bench.length, t2Bench.length].reduce((a, b) => a > b ? a : b);
+    int maxStarters = t1Starters.length > t2Starters.length ? t1Starters.length : t2Starters.length;
+    int maxBench = t1Bench.length > t2Bench.length ? t1Bench.length : t2Bench.length;
 
     return Container(
-      decoration: const BoxDecoration(
-        image: DecorationImage(image: AssetImage('assets/sfondo.png'), fit: BoxFit.cover),
+      decoration: BoxDecoration(
+        image: DecorationImage(
+          image: const AssetImage('assets/sfondo.png'), 
+          fit: BoxFit.cover,
+          colorFilter: ColorFilter.mode(Colors.black.withValues(alpha: 0.6), BlendMode.darken),
+        ),
       ),
       child: Scaffold(
         backgroundColor: Colors.transparent,
         appBar: AppBar(
           title: const Text('Tabellino Partita', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-          backgroundColor: Colors.orange[800]?.withValues(alpha: 0.9),
+          backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
         ),
-        body: isLoading
+        body: isLoading 
             ? const Center(child: CircularProgressIndicator(color: Colors.orange))
             : Column(
                 children: [
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 12),
-                    color: Colors.orange[900]?.withValues(alpha: 0.9),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
+                    margin: const EdgeInsets.all(16),
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(colors: [Colors.orange[700]!, Colors.orange[900]!]),
+                      borderRadius: BorderRadius.circular(20),
+                      boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.3), blurRadius: 10, offset: const Offset(0, 5))],
+                    ),
+                    child: Column(
                       children: [
-                        Expanded(child: Text(widget.team1Name, textAlign: TextAlign.right, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Column(
-                            children: [
-                              Text('${widget.score1} : ${widget.score2}', style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold)),
-                              const SizedBox(height: 4),
-                              Text('${t1Total.toStringAsFixed(1)} pt  -  ${t2Total.toStringAsFixed(1)} pt', style: const TextStyle(color: Colors.amber, fontSize: 14, fontWeight: FontWeight.bold)),
-                            ],
-                          ),
+                        Text('GIORNATA ${widget.matchDay}', style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, letterSpacing: 2, fontSize: 12)),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(child: Text(widget.team1Name, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                              decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.2), borderRadius: BorderRadius.circular(12)),
+                              child: Text('${formatScore(widget.score1)} - ${formatScore(widget.score2)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 24)),
+                            ),
+                            Expanded(child: Text(widget.team2Name, textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16))),
+                          ],
                         ),
-                        Expanded(child: Text(widget.team2Name, textAlign: TextAlign.left, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold))),
+                        const SizedBox(height: 12),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceAround,
+                          children: [
+                            Text('FantaMedia: ${t1Total.toStringAsFixed(1)}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                            Text('FantaMedia: ${t2Total.toStringAsFixed(1)}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                          ],
+                        )
                       ],
                     ),
                   ),
 
                   Expanded(
                     child: ListView(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      padding: const EdgeInsets.only(bottom: 40),
                       children: [
                         if (t1Coach != null || t2Coach != null) ...[
                           const Padding(
-                            padding: EdgeInsets.symmetric(vertical: 8),
+                            padding: EdgeInsets.only(top: 8, bottom: 8),
                             child: Center(child: Text('ALLENATORI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2))),
                           ),
                           _buildMatchRow(t1Coach, t2Coach),
-                          const SizedBox(height: 8),
                         ],
 
                         const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 8),
+                          padding: EdgeInsets.only(top: 16, bottom: 8),
                           child: Center(child: Text('TITOLARI', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 2))),
                         ),
                         
