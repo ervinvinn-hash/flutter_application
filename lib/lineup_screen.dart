@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class TeamLineupScreen extends StatefulWidget {
   final String teamId;
@@ -172,19 +173,21 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
         String? pos = p['position_id'];
         if (p['is_starter'] == true) {
            if (pos != null) {
-              if (pos.startsWith('D')) sD.add(p);
+              if (pos == 'CT1') sCT = p;
+              else if (pos == 'P1') sP = p;
+              else if (pos.startsWith('D')) sD.add(p);
               else if (pos.startsWith('C')) sC.add(p);
               else if (pos.startsWith('A')) sA.add(p);
-              else if (pos == 'P1') sP = p;
-              else if (pos == 'CT1') sCT = p;
-           } else {
+              
+              
+            } else {
               // Fallback se vecchi dati non hanno position_id
               if (p['role'] == 'D') sD.add(p);
               else if (p['role'] == 'C') sC.add(p);
               else if (p['role'] == 'A') sA.add(p);
               else if (p['role'] == 'P') sP = p;
               else if (p['role'] == 'CT') sCT = p;
-           }
+            }
         } else if (p['is_bench'] == true) {
            if (pos != null) {
               int idx = benchPosIds.indexOf(pos);
@@ -210,9 +213,16 @@ class _TeamLineupScreenState extends State<TeamLineupScreen> with SingleTickerPr
       }
 
       // 4. Inferenza modulo
-      String inferredForm = '${sD.length}-${sC.length}-${sA.length}';
-      if (!validFormations.contains(inferredForm)) inferredForm = '3-4-3';
-      currentFormation = inferredForm;
+      // 4. Inferenza modulo o recupero modulo salvato
+      final prefs = await SharedPreferences.getInstance();
+      String? savedFormation = prefs.getString('saved_form_${widget.teamId}');
+      
+      if (savedFormation != null && validFormations.contains(savedFormation)) {
+        currentFormation = savedFormation;
+      } else {
+        String inferredForm = '${sD.length}-${sC.length}-${sA.length}';
+        currentFormation = validFormations.contains(inferredForm) ? inferredForm : '3-4-3';
+      }
       
       int rD = int.parse(currentFormation[0]);
       int rC = int.parse(currentFormation[2]);

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class Player {
@@ -7,7 +8,7 @@ class Player {
   final String role;
   final String team;
   final int price;
-  double purchasePrice; // Corretto per i mezzi crediti
+  double purchasePrice;
 
   Player(this.name, this.role, this.team, this.price, {this.id = 0, this.purchasePrice = 0.0});
 }
@@ -24,9 +25,10 @@ class RosterScreen extends StatefulWidget {
 class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   double budget = 0;
+  String teamName = "La Mia Rosa"; // Nome squadra di default
   List<Player> mySquad = [];
   List<Player> allPlayers = [];
-  Set<int> purchasedPlayerIds = {}; // Il registro di TUTTI i giocatori comprati nella lega
+  Set<int> purchasedPlayerIds = {};
   bool isLoading = true;
 
   String _selectedRoleFilter = 'Tutti';
@@ -46,22 +48,18 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
     final Map<String, int> roleOrder = {'P': 1, 'D': 2, 'C': 3, 'A': 4, 'CT': 5};
     
     mySquad.sort((a, b) {
-      // 1. Ordina per Ruolo
       int roleComp = (roleOrder[a.role] ?? 99).compareTo(roleOrder[b.role] ?? 99);
       if (roleComp != 0) return roleComp;
       
-      // 2. Estrapola il cognome se c'è un punto
       String lastNameA = a.name.contains('.') ? a.name.split('.').last.trim() : a.name;
       String lastNameB = b.name.contains('.') ? b.name.split('.').last.trim() : b.name;
       
-      // 3. Ordina per Cognome
       return lastNameA.compareTo(lastNameB);
     });
   }
 
   Future<void> _fetchDataFromDatabase() async {
     try {
-      // ORA CHIEDIAMO I DATI GIÀ ORDINATI DA SUPABASE
       final playersData = await Supabase.instance.client
           .from('players')
           .select()
@@ -92,7 +90,8 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
 
       setState(() {
         allPlayers = loadedPlayers;
-        budget = (teamData['budget'] as num).toDouble(); 
+        budget = (teamData['budget'] as num).toDouble();
+        teamName = teamData['team_name'] ?? "La Mia Rosa"; // Recupera il nome squadra
         mySquad = myLoadedSquad;
         purchasedPlayerIds = globalUnavailable; 
         _sortMySquad();
@@ -152,7 +151,7 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
               const SizedBox(height: 15),
               TextField(
                 controller: priceController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true), // Tastiera per decimali
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Crediti spesi', 
@@ -194,7 +193,7 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
         budget -= spentCredits;
         player.purchasePrice = spentCredits;
         mySquad.add(player);
-        purchasedPlayerIds.add(player.id); // Nascondilo subito dal listone
+        purchasedPlayerIds.add(player.id);
         _sortMySquad();
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hai preso ${player.name} a $spentCredits cr!'), backgroundColor: Colors.green));
@@ -217,7 +216,7 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
               const SizedBox(height: 15),
               TextField(
                 controller: recoverController,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true), // Tastiera per decimali
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 autofocus: true,
                 decoration: InputDecoration(
                   labelText: 'Crediti da recuperare', 
@@ -260,10 +259,35 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
       setState(() {
         budget += recoveredCredits;
         mySquad.remove(player);
-        purchasedPlayerIds.remove(player.id); // Rimettilo subito nel listone!
+        purchasedPlayerIds.remove(player.id);
       });
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Svincolato ${player.name} (+$recoveredCredits cr)'), backgroundColor: Colors.orange[800]));
     } catch (e) {}
+  }
+
+  void _copyRosterToClipboard() {
+    StringBuffer sb = StringBuffer();
+    sb.writeln('ROSA - $teamName');
+    sb.writeln('Crediti rimasti: $budget 🪙\n');
+    
+    for (var role in ['P', 'D', 'C', 'A', 'CT']) {
+      var playersInRole = mySquad.where((p) => p.role == role).toList();
+      if (playersInRole.isNotEmpty) {
+        String roleName = role == 'P' ? 'PORTIERI' : (role == 'D' ? 'DIFENSORI' : (role == 'C' ? 'CENTROCAMPISTI' : (role == 'A' ? 'ATTACCANTI' : 'ALLENATORI')));
+        sb.writeln(roleName);
+        for (var p in playersInRole) {
+          String sigla = (p.team).length >= 3 
+              ? (p.team).substring(0, 3).toUpperCase() 
+              : (p.team).toUpperCase();
+              
+          sb.writeln('${p.role} - ${p.name} ($sigla)');
+        }
+        sb.writeln('');
+      }
+    }
+
+    Clipboard.setData(ClipboardData(text: sb.toString()));
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Rosa copiata negli appunti! 📋'), backgroundColor: Colors.green));
   }
 
   Color getRoleColor(String role) {
@@ -359,7 +383,6 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
-    // MODIFICA FILTRO: ORA NASCONDE I GIOCATORI COMPRATI DA *CHIUNQUE* (purchasedPlayerIds)
     List<Player> availableListone = allPlayers.where((p) {
       return !purchasedPlayerIds.contains(p.id);
     }).toList();
@@ -387,6 +410,13 @@ class _RosterScreenState extends State<RosterScreen> with SingleTickerProviderSt
           backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: const IconThemeData(color: Color.fromRGBO(255, 255, 255, 1)),
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.share),
+              tooltip: 'Copia Rosa',
+              onPressed: _copyRosterToClipboard,
+            ),
+          ],
         ),
         body: isLoading 
           ? const Center(child: CircularProgressIndicator(color: Color.fromRGBO(255, 152, 0, 1))) 
